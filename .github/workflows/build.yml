@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          brew install xcodegen zstd spirv-cross
+          brew install xcodegen zstd spirv-cross unar
           python -m pip install --upgrade pip
           python -m pip install lz4 capstone fonttools backports.zstd
 
@@ -45,7 +45,9 @@ jobs:
           set -euo pipefail
 
           WORK="$RUNNER_TEMP/parabox"
-          mkdir -p "$WORK"
+          DOWNLOAD="$WORK/game.download"
+          GAME_DIR="$RUNNER_TEMP/GameFiles"
+          mkdir -p "$WORK" "$GAME_DIR"
 
           if [[ -z "${GAME_URL:-}" ]]; then
             echo "::error::Game_URL secret is empty."
@@ -58,19 +60,25 @@ jobs:
 
           curl --fail --location --show-error --progress-bar \
             --retry 3 --retry-delay 5 --connect-timeout 30 \
-            --output "$WORK/base.nsp.part" "$GAME_URL"
+            --output "$DOWNLOAD.part" "$GAME_URL"
+          mv "$DOWNLOAD.part" "$DOWNLOAD"
 
-          mv "$WORK/base.nsp.part" "$WORK/base.nsp"
+          echo "Downloaded file details:"
+          ls -lh "$DOWNLOAD"
+          file "$DOWNLOAD"
+          python - "$DOWNLOAD" <<'PY'
+          import sys
+          from pathlib import Path
+          p = Path(sys.argv[1])
+          with p.open("rb") as f:
+              head = f.read(16)
+          print("First 16 bytes (hex):", head.hex(" "))
+          print("First bytes (text):", repr(head[:16]))
+          PY
 
-          python - "$WORK/base.nsp" "$WORK/prod.keys" <<'PY'
+          python - "$WORK/prod.keys" <<'PY'
           import base64, os, re, sys
           from pathlib import Path
-
-          game = Path(sys.argv[1])
-          with game.open("rb") as f:
-              if f.read(4) != b"PFS0":
-                  raise SystemExit("Downloaded base.nsp is not a valid PFS0/NSP package.")
-
           encoded = re.sub(r"\\s+", "", os.environ["KEYS_BASE64"].strip())
           try:
               keys = base64.b64decode(encoded, validate=True)
@@ -78,11 +86,53 @@ jobs:
               raise SystemExit(f"Keys_URL is not valid Base64: {exc}")
           if not keys:
               raise SystemExit("Decoded prod.keys is empty.")
-
-          Path(sys.argv[2]).write_bytes(keys)
-          Path(sys.argv[2]).chmod(0o600)
-          print(f"Base NSP: {game.stat().st_size:,} bytes")
+          Path(sys.argv[1]).write_bytes(keys)
+          Path(sys.argv[1]).chmod(0o600)
           print(f"prod.keys decoded: {len(keys):,} bytes (contents not displayed)")
+          PY
+
+          python - "$DOWNLOAD" "$GAME_DIR" "$WORK/extracted" <<'PY'
+          import shutil, subprocess, sys
+          from pathlib import Path
+
+          source, game_dir, extract_dir = map(Path, sys.argv[1:])
+          game_dir.mkdir(parents=True, exist_ok=True)
+          extract_dir.mkdir(parents=True, exist_ok=True)
+
+          with source.open("rb") as f:
+              signature = f.read(8)
+
+          rar_signatures = (b"Rar!\\x1a\\x07\\x00", b"Rar!\\x1a\\x07\\x01\\x00")
+          if any(signature.startswith(s) for s in rar_signatures):
+              print("RAR archive detected; extracting game package.")
+              subprocess.run(["unar", "-o", str(extract_dir), str(source)], check=True)
+              packages = sorted(p for p in extract_dir.rglob("*")
+                                if p.is_file() and p.suffix.lower() in {".nsp", ".xci"})
+              if not packages:
+                  raise SystemExit("RAR archive contained no NSP or XCI package.")
+              for p in packages:
+                  target = game_dir / p.name
+                  if target.exists():
+                      raise SystemExit(f"Duplicate package filename: {p.name}")
+                  shutil.copy2(p, target)
+                  print(f"Prepared {target.name}: {target.stat().st_size:,} bytes")
+          elif signature[:4] == b"PFS0":
+              target = game_dir / "base.nsp"
+              shutil.copy2(source, target)
+              print(f"Direct NSP detected: {target.stat().st_size:,} bytes")
+          elif signature[:4] == b"HEAD":
+              target = game_dir / "base.xci"
+              shutil.copy2(source, target)
+              print(f"Direct XCI detected: {target.stat().st_size:,} bytes")
+          else:
+              if signature[:4].lstrip().lower().startswith((b"<", b"<!do", b"<htm")):
+                  detail = "The URL returned HTML, likely a Google Drive confirmation or permission page."
+              else:
+                  detail = "The URL returned an unrecognized file/archive format."
+              raise SystemExit(f"{detail} First bytes: {signature.hex(' ')}")
+
+          if not any(p.is_file() and p.suffix.lower() in {".nsp", ".xci"} for p in game_dir.iterdir()):
+              raise SystemExit("No supported base game package was prepared.")
           PY
 
       - name: Configure IPA to keep RomFS external
