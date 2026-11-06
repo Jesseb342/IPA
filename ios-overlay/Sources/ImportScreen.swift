@@ -162,7 +162,6 @@ private enum ImportFileStorage {
         let stringsStart = 16 + Int(entriesSize)
         let stringsEnd = stringsStart + Int(stringSize)
         var ncaCount = 0
-        var validNCAHeaderCount = 0
         for index in 0..<Int(count) {
             let entry = 16 + index * 0x18
             let offset = readLE64(table, entry)
@@ -182,23 +181,14 @@ private enum ImportFileStorage {
                 throw ImportValidationError.invalidContainer("an entry has an invalid filename.")
             }
             if name.lowercased().hasSuffix(".nca") {
+                // NCA headers are encrypted with the console's header key.
+                // Their plaintext magic is therefore not visible by simply
+                // reading offset 0x200 from the NSP. Full NCA validation must
+                // wait for the LibHac metadata/key inspection stage.
                 ncaCount += 1
-                // An NSP file table alone is easy to fake. Check the NCA
-                // header magic at offset 0x200 of each NCA entry as well.
-                guard size >= 0x204 else {
-                    throw ImportValidationError.invalidContainer("an NCA entry is too small to contain an NCA header.")
-                }
-                let ncaHeaderOffset = metadataSize + offset + 0x200
-                try handle.seek(toOffset: ncaHeaderOffset)
-                let ncaMagic = try handle.read(upToCount: 4) ?? Data()
-                let magic = String(data: ncaMagic, encoding: .ascii)
-                guard ncaMagic.count == 4, ["NCA0", "NCA2", "NCA3"].contains(magic ?? "") else {
-                    throw ImportValidationError.invalidContainer("an .nca entry does not contain a recognized NCA header.")
-                }
-                validNCAHeaderCount += 1
             }
         }
-        guard ncaCount > 0, validNCAHeaderCount > 0 else { throw ImportValidationError.noNCA }
+        guard ncaCount > 0 else { throw ImportValidationError.noNCA }
     }
 
     private static func readLE32(_ data: Data, _ offset: Int) -> UInt32 {
