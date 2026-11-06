@@ -153,6 +153,14 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Upload sideloadable IPA package
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxnative-universal-shell-ipa
+          path: ${{ runner.temp }}/nxnative-shell/build/shell/nxnative-universal-shell.ipa
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Upload shell diagnostics
         if: always()
         uses: actions/upload-artifact@v4
