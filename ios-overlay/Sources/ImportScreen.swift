@@ -2,6 +2,78 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
+import Darwin
+
+private struct NSPContentRecord: Sendable {
+    let type: String
+    let titleID: String
+    let version: String
+}
+
+private enum MetadataProbe {
+    typealias InspectFunction = @convention(c) (
+        UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafeMutablePointer<CChar>, Int32
+    ) -> Int32
+
+    private static let lock = NSLock()
+    private static var frameworkHandle: UnsafeMutableRawPointer?
+    private static var inspectFunction: InspectFunction?
+
+    static func inspect(keysURL: URL, nspURL: URL) throws -> [NSPContentRecord] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if inspectFunction == nil {
+            let binary = Bundle.main.bundleURL
+                .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
+            guard let handle = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                throw ImportValidationError.metadata("Could not load the LibHac metadata engine: \(detail)")
+            }
+            guard let symbol = dlsym(handle, "nxn_inspect_nsp") else {
+                let detail = dlerror().map { String(cString: $0) } ?? "symbol not found"
+                dlclose(handle)
+                throw ImportValidationError.metadata("The metadata engine is missing its inspection function: \(detail)")
+            }
+            frameworkHandle = handle
+            inspectFunction = unsafeBitCast(symbol, to: InspectFunction.self)
+        }
+
+        guard let inspect = inspectFunction else {
+            throw ImportValidationError.metadata("The metadata engine could not be initialized.")
+        }
+
+        var output = [CChar](repeating: 0, count: 64 * 1024)
+        let result = keysURL.path.withCString { keyPath in
+            nspURL.path.withCString { packagePath in
+                output.withUnsafeMutableBufferPointer { buffer in
+                    inspect(keyPath, packagePath, buffer.baseAddress!, Int32(buffer.count))
+                }
+            }
+        }
+        guard result >= 0 else {
+            throw ImportValidationError.metadata(result == -2
+                ? "The package metadata output exceeded the safety limit."
+                : "The metadata engine rejected the input paths (code \(result)).")
+        }
+
+        let response = String(cString: output)
+        if response.hasPrefix("error|") {
+            throw ImportValidationError.metadata(String(response.dropFirst(6)))
+        }
+
+        let records = response.split(separator: "\n").compactMap { line -> NSPContentRecord? in
+            let fields = line.split(separator: "|", omittingEmptySubsequences: false)
+            guard fields.count == 4, fields[0] == "content" else { return nil }
+            return NSPContentRecord(type: String(fields[1]), titleID: String(fields[2]).uppercased(), version: String(fields[3]))
+        }
+        guard !records.isEmpty else {
+            throw ImportValidationError.metadata("No recognized game content metadata was returned.")
+        }
+        return records
+    }
+}
+
 private enum ImportKind: String, Identifiable, Sendable {
     case base, keys, update, dlc
     var id: String { rawValue }
@@ -28,7 +100,7 @@ private enum ImportKind: String, Identifiable, Sendable {
 private struct ImportedGameFile: Codable, Identifiable, Equatable, Sendable {
     let displayName: String
     let storedName: String
-    let validationStatus: String?
+    var validationStatus: String?
     var id: String { storedName }
 }
 
@@ -38,6 +110,8 @@ private enum ImportValidationError: LocalizedError {
     case missingKey(String)
     case invalidContainer(String)
     case noNCA
+    case wrongContentType(expected: String, found: String)
+    case metadata(String)
 
     var errorDescription: String? {
         switch self {
@@ -51,6 +125,10 @@ private enum ImportValidationError: LocalizedError {
             return "Invalid NSP container: \(reason)"
         case .noNCA:
             return "The NSP contains no NCA content files."
+        case .wrongContentType(let expected, let found):
+            return "Wrong NSP content type. Expected \(expected), but found \(found)."
+        case .metadata(let reason):
+            return "Metadata check failed: \(reason)"
         }
     }
 }
@@ -199,6 +277,34 @@ private enum ImportFileStorage {
         (0..<8).reduce(UInt64(0)) { $0 | (UInt64(data[offset + $1]) << (UInt64($1) * 8)) }
     }
 
+    static func inspectContent(_ source: URL, keysURL: URL, kind: ImportKind) throws -> String {
+        let accessed = source.startAccessingSecurityScopedResource()
+        defer { if accessed { source.stopAccessingSecurityScopedResource() } }
+
+        let records = try MetadataProbe.inspect(keysURL: keysURL, nspURL: source)
+        let expected: String
+        switch kind {
+        case .base: expected = "Application"
+        case .update: expected = "Patch"
+        case .dlc: expected = "AddOnContent"
+        case .keys: return "Keys syntax checked"
+        }
+        let matching = records.filter { $0.type == expected }
+        guard let record = matching.first else {
+            let found = Array(Set(records.map(\.type))).sorted().joined(separator: ", ")
+            throw ImportValidationError.wrongContentType(expected: expected, found: found.isEmpty ? "unknown" : found)
+        }
+        let label: String
+        switch kind {
+        case .base: label = "Verified base game"
+        case .update: label = "Verified update"
+        case .dlc: label = "Verified DLC"
+        case .keys: label = "Keys syntax checked"
+        }
+        let extra = records.count > 1 ? " · package has \(records.count) metadata records" : ""
+        return "\(label) · \(record.titleID) · v\(record.version)\(extra)"
+    }
+
     static func copyIntoAppStorage(_ source: URL, prefix: String, validationStatus: String) throws -> ImportedGameFile {
         let accessed = source.startAccessingSecurityScopedResource()
         defer { if accessed { source.stopAccessingSecurityScopedResource() } }
@@ -309,7 +415,7 @@ private struct ImportScreenView: View {
 
                     fileSection(
                         title: "Optional content",
-                        subtitle: "You can add these now or leave them out. NSP container checks do not confirm that a file actually contains DLC."
+                        subtitle: "Optional content is checked against encrypted CNMT metadata when prod.keys is available."
                     ) {
                         fileRow(
                             title: "Game update",
@@ -319,7 +425,7 @@ private struct ImportScreenView: View {
 
                         fileRow(
                             title: "Add DLC",
-                            detail: dlc.isEmpty ? "No DLC selected" : "\(dlc.count) NSP file(s) imported · type not verified",
+                            detail: dlc.isEmpty ? "No DLC selected" : "\(dlc.count) NSP file(s) imported",
                             selected: !dlc.isEmpty
                         ) { picker = ImportPickerRequest(kind: .dlc) }
 
@@ -358,13 +464,13 @@ private struct ImportScreenView: View {
 
                     VStack(alignment: .leading, spacing: 8) {
                         Label(
-                            base != nil && keys != nil ? "Required files imported" : "Waiting for required files",
-                            systemImage: base != nil && keys != nil ? "checkmark.circle.fill" : "info.circle"
+                            base?.validationStatus?.hasPrefix("Verified base game") == true && keys != nil ? "Required files verified" : "Waiting for verified required files",
+                            systemImage: base?.validationStatus?.hasPrefix("Verified base game") == true && keys != nil ? "checkmark.circle.fill" : "info.circle"
                         )
                         .font(.headline)
-                        .foregroundStyle(base != nil && keys != nil ? .green : .primary)
+                        .foregroundStyle(base?.validationStatus?.hasPrefix("Verified base game") == true && keys != nil ? .green : .primary)
 
-                        Text("NSP files are checked for container structure only. The app does not yet read encrypted content metadata, so it cannot confirm whether a selected NSP is a base game, update, or DLC. The on-device extraction and IPA packaging engine is still under development.")
+                        Text("With prod.keys selected, the app reads encrypted CNMT metadata to distinguish base games, updates, and DLC. The on-device extraction and IPA packaging engine is still under development.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -449,24 +555,35 @@ private struct ImportScreenView: View {
         importing = true
         status = "Importing \(urls.count) file(s)…"
         do {
+            let existingKeysURL = keys.map { storedURL(for: $0) }
             let imported = try await Task.detached(priority: .userInitiated) {
                 // Validate every selection before copying any of them. A bad item
                 // must not partially replace a previously valid selection.
                 try urls.forEach { try ImportFileStorage.validate($0, kind: kind) }
-                let level = kind == .keys ? "Keys syntax checked" : "NSP container checked · content type unknown"
-                return try urls.map {
-                    try ImportFileStorage.copyIntoAppStorage($0, prefix: kind.prefix, validationStatus: level)
+                return try urls.map { source in
+                    let level: String
+                    if kind == .keys {
+                        level = "Keys syntax checked"
+                    } else if let existingKeysURL {
+                        level = try ImportFileStorage.inspectContent(source, keysURL: existingKeysURL, kind: kind)
+                    } else {
+                        level = "Container checked · waiting for prod.keys"
+                    }
+                    return try ImportFileStorage.copyIntoAppStorage(source, prefix: kind.prefix, validationStatus: level)
                 }
             }.value
 
             switch kind {
             case .base:
+                if let previous = base { deleteStoredFile(previous) }
                 base = imported.first
                 defaults.set(base.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.base")
             case .keys:
+                if let previous = keys { deleteStoredFile(previous) }
                 keys = imported.first
                 defaults.set(keys.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.keys")
             case .update:
+                if let previous = update { deleteStoredFile(previous) }
                 update = imported.first
                 defaults.set(update.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.update")
             case .dlc:
@@ -474,7 +591,8 @@ private struct ImportScreenView: View {
                 saveDLC()
             }
             let count = imported.count
-            status = "Imported \(count) file(s). NSP containers checked; base/update/DLC content type is not yet verified."
+            status = "Imported \(count) file(s)."
+            if kind == .keys { await verifySavedContent() }
         } catch {
             status = "Import failed: \(error.localizedDescription)"
         }
@@ -513,6 +631,52 @@ private struct ImportScreenView: View {
             }
             saveDLC()
         }
+        if keys != nil { Task { await verifySavedContent() } }
+    }
+
+    private func storedURL(for item: ImportedGameFile) -> URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Imports", isDirectory: true)
+            .appendingPathComponent(item.storedName)
+    }
+
+    @MainActor
+    private func verifySavedContent() async {
+        guard let keys else { return }
+        importing = true
+        status = "Reading encrypted content metadata…"
+        let keyURL = storedURL(for: keys)
+        let baseSnapshot = base
+        let updateSnapshot = update
+        let dlcSnapshot = dlc
+        let baseURL = baseSnapshot.map { storedURL(for: $0) }
+        let updateURL = updateSnapshot.map { storedURL(for: $0) }
+        let dlcURLs = dlcSnapshot.map { storedURL(for: $0) }
+        let checked = await Task.detached(priority: .userInitiated) {
+            func checkedFile(_ item: ImportedGameFile?, url: URL?, kind: ImportKind) -> ImportedGameFile? {
+                guard var item, let url else { return nil }
+                do {
+                    item.validationStatus = try ImportFileStorage.inspectContent(url, keysURL: keyURL, kind: kind)
+                } catch {
+                    item.validationStatus = error.localizedDescription
+                }
+                return item
+            }
+            let checkedBase = checkedFile(baseSnapshot, url: baseURL, kind: .base)
+            let checkedUpdate = checkedFile(updateSnapshot, url: updateURL, kind: .update)
+            let checkedDLC = dlcSnapshot.enumerated().map { index, item -> ImportedGameFile in
+                checkedFile(item, url: dlcURLs[index], kind: .dlc) ?? item
+            }
+            return (checkedBase, checkedUpdate, checkedDLC)
+        }.value
+        base = checked.0
+        update = checked.1
+        dlc = checked.2
+        defaults.set(base.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.base")
+        defaults.set(update.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.update")
+        saveDLC()
+        importing = false
+        status = "Metadata checks finished. Review each file's status above."
     }
 
     private func saveDLC() {
