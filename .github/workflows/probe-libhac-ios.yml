@@ -1,0 +1,52 @@
+name: LibHac iOS NativeAOT Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout probe
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish LibHac as an iOS ARM64 static library
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet --info
+          dotnet publish tools/LibHacAotProbe/LibHacAotProbe.csproj \
+            --configuration Release \
+            --runtime ios-arm64 \
+            --verbosity minimal
+
+          PUBLISH_DIR="tools/LibHacAotProbe/bin/Release/net10.0/ios-arm64/publish"
+          LIBRARY="$PUBLISH_DIR/LibHacAotProbe.a"
+          if [[ ! -s "$LIBRARY" ]]; then
+            echo "::error::NativeAOT did not produce the expected static library: $LIBRARY"
+            find tools/LibHacAotProbe/bin/Release -maxdepth 6 -type f -print || true
+            exit 1
+          fi
+
+          echo "Static library:"
+          ls -lh "$LIBRARY"
+          echo "Exported probe symbol:"
+          xcrun nm -gU "$LIBRARY" | grep -E 'parabox_libhac_aot_probe$'
+
+      - name: Upload NativeAOT probe library
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibHac-iOS-AOT-Probe
+          path: tools/LibHacAotProbe/bin/Release/net10.0/ios-arm64/publish/LibHacAotProbe.a
+          if-no-files-found: error
+          retention-days: 7
