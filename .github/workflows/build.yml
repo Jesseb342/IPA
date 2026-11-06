@@ -89,8 +89,8 @@ jobs:
               raise SystemExit("NativeAOT manifest contains no runtime archives.")
           rendered = " ".join(flags)
           with open(os.environ["GITHUB_ENV"], "a") as env:
-              env.write("DM_LIBHAC_AOT_LINK_INPUTS=" + str(manifest) + "\\n")
-              env.write("DM_LIBHAC_AOT_LINK_FLAGS=" + rendered + "\\n")
+              env.write("DM_LIBHAC_AOT_LINK_INPUTS=" + str(manifest) + chr(10))
+              env.write("DM_LIBHAC_AOT_LINK_FLAGS=" + rendered + chr(10))
           print("Prepared NativeAOT linker inputs: " + ", ".join(f"{k.lower()}={v}" for k, v in counts.items()))
           PY
 
