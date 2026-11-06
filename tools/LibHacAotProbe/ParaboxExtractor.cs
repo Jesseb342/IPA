@@ -62,6 +62,9 @@ public static class ParaboxExtractor
         try
         {
             Extract(keysPath, nspPath, staging);
+            string markerPath = Path.Combine(staging, "Data", "globalgamemanagers");
+            if (!File.Exists(markerPath))
+                throw new InvalidDataException("The extracted RomFS is missing the Parabox marker Data/globalgamemanagers.");
             if (Directory.Exists(destinationPath)) Directory.Move(destinationPath, backup);
             Directory.Move(staging, destinationPath);
             if (Directory.Exists(backup)) Directory.Delete(backup, true);
