@@ -74,6 +74,62 @@ private enum MetadataProbe {
     }
 }
 
+private enum GameExtractor {
+    typealias ExtractFunction = @convention(c) (
+        UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>,
+        UnsafePointer<CChar>, UnsafeMutablePointer<CChar>, Int32
+    ) -> Int32
+
+    private static let lock = NSLock()
+    private static var frameworkHandle: UnsafeMutableRawPointer?
+    private static var extractFunction: ExtractFunction?
+
+    static func extract(keysURL: URL, baseURL: URL, updateURL: URL?, outputDirectory: URL) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if extractFunction == nil {
+            let binary = Bundle.main.bundleURL
+                .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
+            guard let handle = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                throw ImportValidationError.metadata("Could not load the extraction engine: \\(detail)")
+            }
+            guard let symbol = dlsym(handle, "nxn_extract_game") else {
+                let detail = dlerror().map { String(cString: $0) } ?? "symbol not found"
+                dlclose(handle)
+                throw ImportValidationError.metadata("The extraction engine is missing its extraction function: \\(detail)")
+            }
+            frameworkHandle = handle
+            extractFunction = unsafeBitCast(symbol, to: ExtractFunction.self)
+        }
+
+        guard let extract = extractFunction else {
+            throw ImportValidationError.metadata("The extraction engine could not be initialized.")
+        }
+
+        var output = [CChar](repeating: 0, count: 1024 * 1024)
+        let result = keysURL.path.withCString { keyPath in
+            baseURL.path.withCString { basePath in
+                (updateURL?.path ?? "").withCString { updatePath in
+                    outputDirectory.path.withCString { destinationPath in
+                        output.withUnsafeMutableBufferPointer { buffer in
+                            extract(keyPath, basePath, updatePath, destinationPath, buffer.baseAddress!, Int32(buffer.count))
+                        }
+                    }
+                }
+            }
+        }
+
+        let response = output.withUnsafeBufferPointer { buffer in String(cString: buffer.baseAddress!) }
+        guard result == 0 else {
+            let detail = response.isEmpty ? "The native extractor returned code \\(result)." : response
+            throw ImportValidationError.metadata("Extraction stopped (code \\(result)).\\n\\(detail)")
+        }
+        return response
+    }
+}
+
 private enum ImportKind: String, Identifiable, Sendable {
     case base, keys, update, dlc
     var id: String { rawValue }
@@ -381,6 +437,8 @@ private struct ImportScreenView: View {
     @State private var dlc: [ImportedGameFile] = []
     @State private var picker: ImportPickerRequest?
     @State private var importing = false
+    @State private var extracting = false
+    @State private var extractionLog = ""
     @State private var status = ""
     @State private var noUpdateSelected = false
     @State private var dlcSelectionFinished = false
@@ -395,6 +453,9 @@ private struct ImportScreenView: View {
     }
     private var canChooseUpdate: Bool { baseVerified }
     private var canChooseDLC: Bool { updateVerified || noUpdateSelected }
+    private var canExtract: Bool {
+        baseVerified && keys != nil && (updateVerified || noUpdateSelected) && dlcSelectionFinished && dlc.isEmpty
+    }
 
     var body: some View {
         NavigationStack {
@@ -502,6 +563,23 @@ private struct ImportScreenView: View {
                         )
                     }
 
+                    if canExtract {
+                        Button {
+                            Task { await extractGame() }
+                        } label: {
+                            Label("Extract game files", systemImage: "archivebox")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(importing || extracting)
+                    } else if dlcSelectionFinished && !dlc.isEmpty {
+                        Text("DLC files are imported, but DLC extraction is not wired up yet. Remove the DLC selections to test base-game and update extraction.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
                     if importing {
                         HStack(spacing: 10) {
                             ProgressView()
@@ -509,11 +587,24 @@ private struct ImportScreenView: View {
                         }
                         .padding(.vertical, 4)
                     }
+                    if extracting {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Extracting game files. Keep the app open…").foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                    }
 
                     if !status.isEmpty {
                         Text(status)
                             .font(.footnote)
-                            .foregroundColor(status.hasPrefix("Import failed") ? .red : .secondary)
+                            .foregroundColor(status.hasPrefix("Import failed") || status.hasPrefix("Extraction failed") ? .red : .secondary)
+                    }
+                    if !extractionLog.isEmpty {
+                        Text(extractionLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -524,7 +615,7 @@ private struct ImportScreenView: View {
                         .font(.headline)
                         .foregroundStyle(base?.validationStatus?.hasPrefix("Verified base game") == true && keys != nil ? .green : .primary)
 
-                        Text("With prod.keys selected, the app reads encrypted CNMT metadata to distinguish base games, updates, and DLC. The on-device extraction and IPA packaging engine is still under development.")
+                        Text("The app verifies encrypted CNMT metadata and can now extract the base game with an optional update. DLC extraction and game-specific IPA packaging are still under development.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -540,7 +631,7 @@ private struct ImportScreenView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Clear all", role: .destructive, action: clearAll)
-                        .disabled(base == nil && keys == nil && update == nil && dlc.isEmpty)
+                        .disabled(extracting || (base == nil && keys == nil && update == nil && dlc.isEmpty))
                 }
             }
             .sheet(item: $picker) { request in
@@ -600,7 +691,7 @@ private struct ImportScreenView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(importing)
+        .disabled(importing || extracting)
     }
 
     private func completedStep(title: String, detail: String) -> some View {
@@ -697,6 +788,59 @@ private struct ImportScreenView: View {
         importing = false
     }
 
+
+    @MainActor
+    private func extractGame() async {
+        guard let keys, let base, canExtract else { return }
+
+        extracting = true
+        extractionLog = ""
+        status = "Preparing a clean extraction folder…"
+
+        let keyURL = storedURL(for: keys)
+        let baseURL = storedURL(for: base)
+        let updateURL = updateVerified ? update.map { storedURL(for: $0) } : nil
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let temporary = documents.appendingPathComponent("PreparedGame-\\(UUID().uuidString)", isDirectory: true)
+        let destination = documents.appendingPathComponent("PreparedGame", isDirectory: true)
+
+        do {
+            try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+            status = "Extracting the base game\\(updateURL == nil ? "" : " and update")…"
+            let log = try await Task.detached(priority: .userInitiated) {
+                try GameExtractor.extract(
+                    keysURL: keyURL,
+                    baseURL: baseURL,
+                    updateURL: updateURL,
+                    outputDirectory: temporary
+                )
+            }.value
+
+            let exefs = temporary.appendingPathComponent("ExeFS", isDirectory: true)
+            let romfs = temporary.appendingPathComponent("RomFS.img")
+            guard FileManager.default.fileExists(atPath: exefs.path),
+                  FileManager.default.fileExists(atPath: romfs.path) else {
+                throw ImportValidationError.metadata("The extractor returned success but did not create both ExeFS and RomFS.img.\\n\\(log)")
+            }
+
+            if FileManager.default.fileExists(atPath: destination.path) {
+                try FileManager.default.removeItem(at: destination)
+            }
+            try FileManager.default.moveItem(at: temporary, to: destination)
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            var mutableDestination = destination
+            try? mutableDestination.setResourceValues(values)
+
+            extractionLog = log.isEmpty ? "Extraction completed." : log
+            status = "Extraction complete. Files are saved in Documents/PreparedGame."
+        } catch {
+            try? FileManager.default.removeItem(at: temporary)
+            extractionLog = error.localizedDescription
+            status = "Extraction failed: \\(error.localizedDescription)"
+        }
+        extracting = false
+    }
 
     private func loadSavedFiles() {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
