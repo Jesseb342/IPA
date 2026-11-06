@@ -78,6 +78,22 @@ jobs:
           test -s "$SHELL_ZIP"
           ls -lh "$SHELL_ZIP"
 
+      - name: Package shell as an IPA for sideload testing
+        shell: bash
+        env:
+          DM_ROOT: ${{ runner.temp }}/nxnative-shell
+        run: |
+          set -euo pipefail
+          SOURCE="$DM_ROOT/build/shell/nxnative-shell-build-input.zip"
+          IPA="$DM_ROOT/build/shell/nxnative-universal-shell.ipa"
+          test -s "$SOURCE"
+          cp "$SOURCE" "$IPA"
+          unzip -t "$IPA" >/dev/null
+          unzip -Z1 "$IPA" | grep -qx 'Payload/DmIOS.app/Info.plist'
+          unzip -Z1 "$IPA" | grep -qx 'Payload/DmIOS.app/DmIOS'
+          echo "Created IPA-format package:"
+          ls -lh "$IPA"
+
       - name: Verify import screen was compiled into the app
         shell: bash
         env:
