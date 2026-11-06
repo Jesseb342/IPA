@@ -57,6 +57,10 @@ private enum ImportValidationError: LocalizedError {
 
 private enum ImportFileStorage {
     static func validate(_ source: URL, kind: ImportKind) throws {
+        let expectedExtension = kind == .keys ? "keys" : "nsp"
+        guard source.pathExtension.lowercased() == expectedExtension else {
+            throw ImportValidationError.invalidContainer("expected a .\(expectedExtension) file.")
+        }
         let accessed = source.startAccessingSecurityScopedResource()
         defer { if accessed { source.stopAccessingSecurityScopedResource() } }
         switch kind {
@@ -100,11 +104,14 @@ private enum ImportFileStorage {
         guard let headerKey = parsed["header_key"], headerKey.count == 64 else {
             throw ImportValidationError.missingKey("header_key (32-byte hexadecimal value)")
         }
-        let hasMasterKey = parsed.contains { name, value in
-            name.range(of: #"^master_key_[0-9a-f]{2}$"#, options: .regularExpression) != nil && value.count == 64
+        // Switch master_key values are 128-bit AES keys (16 bytes = 32 hex
+        // characters). header_key is 256 bits (32 bytes = 64 hex characters).
+        let hasMasterKey = parsed.contains { entry in
+            entry.key.range(of: #"^master_key_[0-9a-f]{2}$"#, options: .regularExpression) != nil
+                && entry.value.count == 32
         }
         guard hasMasterKey else {
-            throw ImportValidationError.missingKey("at least one 32-byte master_key_XX entry")
+            throw ImportValidationError.missingKey("at least one 16-byte master_key_XX entry")
         }
     }
 
@@ -147,6 +154,7 @@ private enum ImportFileStorage {
         let stringsStart = 16 + Int(entriesSize)
         let stringsEnd = stringsStart + Int(stringSize)
         var ncaCount = 0
+        var validNCAHeaderCount = 0
         for index in 0..<Int(count) {
             let entry = 16 + index * 0x18
             let offset = readLE64(table, entry)
@@ -165,9 +173,24 @@ private enum ImportFileStorage {
                   let name = String(data: table[nameStart..<terminator], encoding: .utf8) else {
                 throw ImportValidationError.invalidContainer("an entry has an invalid filename.")
             }
-            if name.lowercased().hasSuffix(".nca") { ncaCount += 1 }
+            if name.lowercased().hasSuffix(".nca") {
+                ncaCount += 1
+                // An NSP file table alone is easy to fake. Check the NCA
+                // header magic at offset 0x200 of each NCA entry as well.
+                guard size >= 0x204 else {
+                    throw ImportValidationError.invalidContainer("an NCA entry is too small to contain an NCA header.")
+                }
+                let ncaHeaderOffset = metadataSize + offset + 0x200
+                try handle.seek(toOffset: ncaHeaderOffset)
+                let ncaMagic = try handle.read(upToCount: 4) ?? Data()
+                let magic = String(data: ncaMagic, encoding: .ascii)
+                guard ncaMagic.count == 4, ["NCA0", "NCA2", "NCA3"].contains(magic ?? "") else {
+                    throw ImportValidationError.invalidContainer("an .nca entry does not contain a recognized NCA header.")
+                }
+                validNCAHeaderCount += 1
+            }
         }
-        guard ncaCount > 0 else { throw ImportValidationError.noNCA }
+        guard ncaCount > 0, validNCAHeaderCount > 0 else { throw ImportValidationError.noNCA }
     }
 
     private static func readLE32(_ data: Data, _ offset: Int) -> UInt32 {
