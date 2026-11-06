@@ -87,7 +87,7 @@ jobs:
           python - "$WORK/prod.keys" <<'PY'
           import base64, os, re, sys
           from pathlib import Path
-          encoded = re.sub(r"\\s+", "", os.environ["KEYS_BASE64"].strip())
+          encoded = re.sub(r"\s+", "", os.environ["KEYS_BASE64"].strip())
           try:
               keys = base64.b64decode(encoded, validate=True)
           except Exception as exc:
