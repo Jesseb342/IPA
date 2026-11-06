@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/build-universal-shell.yml'
+      - 'ios-overlay/**'
 
 permissions:
   contents: read
@@ -29,6 +30,13 @@ jobs:
           ref: main
           fetch-depth: 1
 
+      - name: Checkout IPA import-screen overlay
+        uses: actions/checkout@v4
+        with:
+          repository: Jesseb342/IPA
+          ref: ${{ github.sha }}
+          path: ipa-overlay
+
       - name: Record source revision
         shell: bash
         run: |
@@ -47,6 +55,18 @@ jobs:
           xcodebuild -version
           xcodegen --version
 
+      - name: Apply IPA import-screen overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s ipa-overlay/ios-overlay/Sources/ImportScreen.swift
+          python3 -m py_compile ipa-overlay/ios-overlay/tools/apply_import_ui.py
+          cp ipa-overlay/ios-overlay/Sources/ImportScreen.swift dm/ios/Sources/ImportScreen.swift
+          python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
+          grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
+          grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
+          echo "IPA import UI overlay applied."
+
       - name: Build game-free shell
         shell: bash
         env:
@@ -57,6 +77,18 @@ jobs:
           SHELL_ZIP="$DM_ROOT/build/shell/nxnative-shell-build-input.zip"
           test -s "$SHELL_ZIP"
           ls -lh "$SHELL_ZIP"
+
+      - name: Verify import screen was compiled into the app
+        shell: bash
+        env:
+          DM_ROOT: ${{ runner.temp }}/nxnative-shell
+        run: |
+          set -euo pipefail
+          APP="$DM_ROOT/build/shell/app"
+          test -s "$APP/DmIOS"
+          strings "$APP/DmIOS" | grep -Fq 'Prepare a game'
+          strings "$APP/DmIOS" | grep -Fq 'prod.keys'
+          echo "Native import screen strings found in the shell executable."
 
       - name: Verify shell contains no game payload
         shell: bash
