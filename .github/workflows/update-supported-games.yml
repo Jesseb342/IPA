@@ -1,0 +1,49 @@
+name: Refresh Supported Games Catalog
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Refresh the upstream profile index four times per day.
+    - cron: "17 */6 * * *"
+  push:
+    paths:
+      - ".github/workflows/update-supported-games.yml"
+      - "tools/update_supported_games.py"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: supported-games-catalog
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out IPA repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Fetch upstream profile folders only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/xinerqu/ns2ios-shell.git upstream-ns2ios
+          git -C upstream-ns2ios sparse-checkout set dm/games
+          git -C upstream-ns2ios checkout main
+
+      - name: Generate compact supported-games catalog
+        run: |
+          python3 tools/update_supported_games.py \
+            --upstream upstream-ns2ios \
+            --output catalog/supported-games.json
+          python3 -m json.tool catalog/supported-games.json > /dev/null
+
+      - name: Commit catalog when it changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Refresh supported games catalog"
+          file_pattern: catalog/supported-games.json
