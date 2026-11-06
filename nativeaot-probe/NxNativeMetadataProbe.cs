@@ -86,9 +86,10 @@ public static unsafe class NxNativeMetadataProbe
 
     private static List<Nca> OpenNsp(KeySet keys, string path)
     {
-        using var storage = new LocalStorage(path, FileAccess.Read);
-        IFileSystem packageFs = new PartitionFileSystem();
-        ((PartitionFileSystem)packageFs).Initialize(PackageStorage(storage)).ThrowIfFailure();
+        // Keep the source storage alive for as long as the returned NCAs are used.
+        var storage = new LocalStorage(path, FileAccess.Read);
+        var packageFs = new PartitionFileSystem();
+        packageFs.Initialize(PackageStorage(storage)).ThrowIfFailure();
 
         var ncas = new List<Nca>();
         foreach (DirectoryEntryEx entry in packageFs.EnumerateEntries("*", SearchOptions.Default))
