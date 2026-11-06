@@ -173,11 +173,9 @@ jobs:
           s = s.replace("UILabel *lb = [[UILabel alloc] initWithFrame:CGRectInset(self.view.bounds, 40, 40)];", "UILabel *lb = [[UILabel alloc] initWithFrame:CGRectInset(self.view.bounds, 40, 40)];\n        self.importStatus = lb;", 1)
           s = s.replace('lb.text = [NSString stringWithFormat:@"Import failed: %@", error.localizedDescription];', 'self.importStatus.text = [NSString stringWithFormat:@"Import failed: %@", error.localizedDescription];', 1)
           s = s.replace('lb.text = @"RomFS copied. Fully close this app, then reopen it to launch the game.";','self.importStatus.text = @"RomFS copied. Fully close this app, then reopen it to launch the game."; ', 1)
-          old = 'lb.text = @"Game files not found.\\\\nPut the RomFS folder into this App\\'s Documents as \\\\"romfs\\\\" (Files app), then restart.";'
-          new = 'lb.text = @"Game files are missing. Use the button below to import your extracted RomFS folder.";'
-          if s.count(old) != 1:
+          if "Game files not found." not in s:
               raise SystemExit("Could not locate the missing-game instructions.")
-          s = s.replace(old, new, 1)
+          s = s.replace("Game files not found.", "Game files are missing. Use the button below to import your extracted RomFS folder.", 1)
           s = s.replace('[self.view addSubview:lb]; return;', '''[self.view addSubview:lb];
                   UIButton *choose = [UIButton buttonWithType:UIButtonTypeSystem];
                   choose.translatesAutoresizingMaskIntoConstraints = NO;
@@ -237,6 +235,7 @@ jobs:
           }
           - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller { (void)controller; }
           """
+          methods = methods.replace("lb.text =", "self.importStatus.text =")
           if s.count(anchor) != 1:
               raise SystemExit("Could not find frontend insertion point.")
           s = s.replace(anchor, methods + "\n" + anchor, 1)
