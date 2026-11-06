@@ -51,12 +51,15 @@ jobs:
 
           if file "$WORK/download" | grep -qi 'RAR archive'; then
             unar -o "$WORK/unpacked" "$WORK/download"
-            mapfile -t NSP_FILES < <(find "$WORK/unpacked" -type f -iname '*.nsp' -print)
-            if [[ "${#NSP_FILES[@]}" -ne 1 ]]; then
-              echo "::error::Expected exactly one NSP in the downloaded RAR; found ${#NSP_FILES[@]}."
+            NSP_COUNT=0
+            while IFS= read -r NSP_PATH; do
+              NSP_COUNT=$((NSP_COUNT + 1))
+              cp "$NSP_PATH" "$WORK/input/base.nsp"
+            done < <(find "$WORK/unpacked" -type f -iname '*.nsp' -print)
+            if [[ "$NSP_COUNT" -ne 1 ]]; then
+              echo "::error::Expected exactly one NSP in the downloaded RAR; found $NSP_COUNT."
               exit 1
             fi
-            cp "${NSP_FILES[0]}" "$WORK/input/base.nsp"
           else
             python - "$WORK/download" "$WORK/input/base.nsp" <<'PY'
           import shutil, sys
