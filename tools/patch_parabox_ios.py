@@ -144,14 +144,4 @@ fi'''
 if build_source.count(old_line) != 1:
     raise SystemExit("Could not find unique linker-flags insertion point in build_ipa.sh.")
 build.write_text(build_source.replace(old_line, new_line, 1))
-print("Updated NativeAOT linker integration to consume the generated .NET iOS runtime manifest.")
-new_line = old_line + '''
-if [ -n "${DM_LIBHAC_AOT_LIB:-}" ]; then
-  [ -s "$DM_LIBHAC_AOT_LIB" ] || die "NativeAOT LibHac library missing: $DM_LIBHAC_AOT_LIB"
-  echo "OTHER_LDFLAGS = \\$(inherited) -force_load $DM_LIBHAC_AOT_LIB -framework CoreFoundation -framework CryptoKit -framework Foundation -framework Network -framework Security -framework GSS -lobjc -lswiftCore -lswiftFoundation -licucore -lz -lm -L/usr/lib/swift" >> Gen/dm.xcconfig
-  t "linked LibHac iOS extractor: $DM_LIBHAC_AOT_LIB"
-fi'''
-if build_source.count(old_line) != 1:
-    raise SystemExit("Could not find unique linker-flags insertion point in build_ipa.sh.")
-build.write_text(build_source.replace(old_line, new_line, 1))
-print("Patched the iOS first-launch NSP/keys importer and NativeAOT linker integration.")
+print("Patched the iOS importer and NativeAOT linker integration.")
