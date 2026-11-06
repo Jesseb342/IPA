@@ -2,6 +2,10 @@ name: Build Universal NxNative Shell
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-universal-shell.yml'
 
 permissions:
   contents: read
