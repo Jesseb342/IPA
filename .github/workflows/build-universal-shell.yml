@@ -85,7 +85,7 @@ jobs:
         run: |
           set -euo pipefail
           APP="$DM_ROOT/build/shell/app"
-          SOURCE="$DM_ROOT/dm/ios/Sources/ImportScreen.swift"
+          SOURCE="$GITHUB_WORKSPACE/dm/ios/Sources/ImportScreen.swift"
           BINARY_STRINGS="$RUNNER_TEMP/DmIOS.strings"
           test -s "$APP/DmIOS"
           test -s "$SOURCE"
