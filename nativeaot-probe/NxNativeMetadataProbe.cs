@@ -12,9 +12,11 @@ using LibHac.Fs;
 using LibHac.Fs.Fsa;
 using LibHac.FsSystem;
 using LibHac.Ncm;
+using LibHac.Spl;
 using LibHac.Tools.Fs;
 using LibHac.Tools.FsSystem;
 using LibHac.Tools.FsSystem.NcaUtils;
+using Path = System.IO.Path;
 using LibHac.Tools.Ncm;
 
 public static unsafe class NxNativeMetadataProbe
