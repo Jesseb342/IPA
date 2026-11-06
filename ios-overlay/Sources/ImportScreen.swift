@@ -552,6 +552,10 @@ private struct ImportScreenView: View {
     @MainActor
     private func importFiles(_ urls: [URL], kind: ImportKind) async {
         guard !urls.isEmpty else { return }
+        if kind != .keys && keys == nil {
+            status = "Import failed: Import and verify prod.keys before selecting any NSP. No NSP was copied."
+            return
+        }
         importing = true
         status = "Importing \(urls.count) file(s)…"
         do {
@@ -567,7 +571,7 @@ private struct ImportScreenView: View {
                     } else if let existingKeysURL {
                         level = try ImportFileStorage.inspectContent(source, keysURL: existingKeysURL, kind: kind)
                     } else {
-                        level = "Container checked · waiting for prod.keys"
+                        throw ImportValidationError.metadata("Import prod.keys before selecting NSP content.")
                     }
                     return try ImportFileStorage.copyIntoAppStorage(source, prefix: kind.prefix, validationStatus: level)
                 }
