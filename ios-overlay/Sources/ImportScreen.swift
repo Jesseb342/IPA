@@ -160,7 +160,7 @@ private struct ImportScreenView: View {
                     if !status.isEmpty {
                         Text(status)
                             .font(.footnote)
-                            .foregroundStyle(status.hasPrefix("Import failed") ? .red : .secondary)
+                            .foregroundColor(status.hasPrefix("Import failed") ? .red : .secondary)
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -177,7 +177,7 @@ private struct ImportScreenView: View {
                     }
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+                    .background(Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 14))
                 }
                 .padding(20)
                 .frame(maxWidth: 680)
@@ -220,7 +220,7 @@ private struct ImportScreenView: View {
             }
             VStack(spacing: 0, content: content)
                 .padding(.horizontal, 12)
-                .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
+                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
         }
     }
 
@@ -234,7 +234,7 @@ private struct ImportScreenView: View {
             HStack(spacing: 12) {
                 Image(systemName: selected ? "checkmark.circle.fill" : "doc.badge.plus")
                     .font(.title2)
-                    .foregroundStyle(selected ? .green : .tint)
+                    .foregroundColor(selected ? .green : .accentColor)
                     .frame(width: 30)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.headline).foregroundStyle(.primary)
@@ -263,13 +263,13 @@ private struct ImportScreenView: View {
             switch kind {
             case .base:
                 base = imported.first
-                defaults.set(base?.storedName, forKey: "nxn.import.base")
+                defaults.set(base.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.base")
             case .keys:
                 keys = imported.first
-                defaults.set(keys?.storedName, forKey: "nxn.import.keys")
+                defaults.set(keys.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.keys")
             case .update:
                 update = imported.first
-                defaults.set(update?.storedName, forKey: "nxn.import.update")
+                defaults.set(update.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.update")
             case .dlc:
                 dlc.append(contentsOf: imported)
                 saveDLC()
@@ -307,9 +307,10 @@ private struct ImportScreenView: View {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let folder = documents.appendingPathComponent("Imports", isDirectory: true)
         func existing(_ key: String) -> ImportedGameFile? {
-            guard let name = defaults.string(forKey: key),
-                  FileManager.default.fileExists(atPath: folder.appendingPathComponent(name).path) else { return nil }
-            return ImportedGameFile(displayName: name, storedName: name)
+            guard let data = defaults.data(forKey: key),
+                  let item = try? JSONDecoder().decode(ImportedGameFile.self, from: data),
+                  FileManager.default.fileExists(atPath: folder.appendingPathComponent(item.storedName).path) else { return nil }
+            return item
         }
         base = existing("nxn.import.base")
         keys = existing("nxn.import.keys")
