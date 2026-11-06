@@ -85,10 +85,18 @@ jobs:
         run: |
           set -euo pipefail
           APP="$DM_ROOT/build/shell/app"
+          SOURCE="$DM_ROOT/dm/ios/Sources/ImportScreen.swift"
           test -s "$APP/DmIOS"
-          strings "$APP/DmIOS" | grep -Fq 'Prepare a game'
-          strings "$APP/DmIOS" | grep -Fq 'prod.keys'
-          echo "Native import screen strings found in the shell executable."
+          test -s "$SOURCE"
+
+          # SwiftUI display strings are not guaranteed to remain as plain
+          # strings in the optimized Mach-O executable. Verify them in source,
+          # and verify the compiled view and Objective-C bridge in the binary.
+          grep -Fq 'Prepare a game' "$SOURCE"
+          grep -Fq 'prod.keys' "$SOURCE"
+          strings "$APP/DmIOS" | grep -Fq 'ImportScreenView'
+          strings "$APP/DmIOS" | grep -Fq '_dm_show_import_screen'
+          echo "Import screen source, compiled view, and native bridge verified."
 
       - name: Verify shell contains no game payload
         shell: bash
