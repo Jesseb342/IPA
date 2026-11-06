@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           brew install xcodegen zstd spirv-cross unar
           python -m pip install --upgrade pip
-          python -m pip install lz4 capstone fonttools backports.zstd
+          python -m pip install lz4 capstone fonttools backports.zstd gdown
 
       - name: Download Parabox base game and decode prod.keys
         env:
@@ -58,9 +58,17 @@ jobs:
             exit 1
           fi
 
-          curl --fail --location --show-error --progress-bar \
-            --retry 3 --retry-delay 5 --connect-timeout 30 \
-            --output "$DOWNLOAD.part" "$GAME_URL"
+          # Google Drive share links need Drive's confirmation/download flow;
+          # curl alone often saves the HTML interstitial instead of the archive.
+          if [[ "$GAME_URL" == *"drive.google.com"* || "$GAME_URL" == *"docs.google.com"* ]]; then
+            echo "Google Drive URL detected; downloading with gdown."
+            gdown --fuzzy "$GAME_URL" --output "$DOWNLOAD.part"
+          else
+            curl --fail --location --show-error --progress-bar \
+              --retry 3 --retry-delay 5 --connect-timeout 30 \
+              --output "$DOWNLOAD.part" "$GAME_URL"
+          fi
+          test -s "$DOWNLOAD.part"
           mv "$DOWNLOAD.part" "$DOWNLOAD"
 
           echo "Downloaded file details:"
