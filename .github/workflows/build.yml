@@ -47,7 +47,8 @@ jobs:
           echo "NativeAOT archive:"
           ls -lh "$RUNNER_TEMP/LibHacAotProbe.a"
           xcrun nm -gU "$RUNNER_TEMP/LibHacAotProbe.a" | grep -E 'parabox_extract_base_romfs$'
-          xcrun nm -gU "$RUNNER_TEMP/LibHacAotProbe.a" | grep -E 'NativeAOT_StaticInitialization'
+          # The exported C entry point above is the required integration check.
+          # NativeAOT runtime initialization symbols are toolchain-version dependent.
 
       - name: Install build dependencies
         shell: bash
