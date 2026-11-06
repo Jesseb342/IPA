@@ -25,10 +25,33 @@ private enum ImportKind: String, Identifiable, Sendable {
     var allowsMultiple: Bool { self == .dlc }
 }
 
-private struct ImportedGameFile: Codable, Identifiable, Equatable {
+private struct ImportedGameFile: Codable, Identifiable, Equatable, Sendable {
     let displayName: String
     let storedName: String
     var id: String { storedName }
+}
+
+private enum ImportFileStorage {
+    static func copyIntoAppStorage(_ source: URL, prefix: String) throws -> ImportedGameFile {
+        let accessed = source.startAccessingSecurityScopedResource()
+        defer { if accessed { source.stopAccessingSecurityScopedResource() } }
+
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let folder = documents.appendingPathComponent("Imports", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        let ext = source.pathExtension.isEmpty ? "bin" : source.pathExtension
+        let storedName = "\(prefix)-\(UUID().uuidString).\(ext)"
+        let destination = folder.appendingPathComponent(storedName)
+        try FileManager.default.copyItem(at: source, to: destination)
+
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var mutableDestination = destination
+        try? mutableDestination.setResourceValues(values)
+
+        return ImportedGameFile(displayName: source.lastPathComponent, storedName: storedName)
+    }
 }
 
 private struct ImportPickerRequest: Identifiable {
@@ -257,7 +280,7 @@ private struct ImportScreenView: View {
         status = "Importing \(urls.count) file(s)…"
         do {
             let imported = try await Task.detached(priority: .userInitiated) {
-                try urls.map { try Self.copyIntoAppStorage($0, prefix: kind.prefix) }
+                try urls.map { try ImportFileStorage.copyIntoAppStorage($0, prefix: kind.prefix) }
             }.value
 
             switch kind {
@@ -282,26 +305,6 @@ private struct ImportScreenView: View {
         importing = false
     }
 
-    private static func copyIntoAppStorage(_ source: URL, prefix: String) throws -> ImportedGameFile {
-        let accessed = source.startAccessingSecurityScopedResource()
-        defer { if accessed { source.stopAccessingSecurityScopedResource() } }
-
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let folder = documents.appendingPathComponent("Imports", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-
-        let ext = source.pathExtension.isEmpty ? "bin" : source.pathExtension
-        let storedName = "\(prefix)-\(UUID().uuidString).\(ext)"
-        let destination = folder.appendingPathComponent(storedName)
-        try FileManager.default.copyItem(at: source, to: destination)
-
-        var values = URLResourceValues()
-        values.isExcludedFromBackup = true
-        var mutableDestination = destination
-        try? mutableDestination.setResourceValues(values)
-
-        return ImportedGameFile(displayName: source.lastPathComponent, storedName: storedName)
-    }
 
     private func loadSavedFiles() {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
