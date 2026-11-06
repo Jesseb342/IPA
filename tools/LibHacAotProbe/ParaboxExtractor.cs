@@ -11,6 +11,7 @@ using LibHac.Fs.Fsa;
 using LibHac.FsSystem;
 using LibHac.Spl;
 using LibHac.Tools.Fs;
+using LibHac.Tools.FsSystem;
 using LibHac.Tools.FsSystem.NcaUtils;
 using LibHac.Tools.FsSystem.RomFs;
 using Path = System.IO.Path;
