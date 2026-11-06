@@ -134,7 +134,7 @@ front.write_text(source)
 build_source = build.read_text()
 old_line = 'echo "OTHER_LDFLAGS = \\$(inherited) \\$(DM_FRAMEWORKS) $F" >> Gen/dm.xcconfig'
 new_line = old_line + '''
-if [ -n "\${DM_LIBHAC_AOT_LIB:-}" ]; then
+if [ -n "${DM_LIBHAC_AOT_LIB:-}" ]; then
   [ -s "$DM_LIBHAC_AOT_LIB" ] || die "NativeAOT LibHac library missing: $DM_LIBHAC_AOT_LIB"
   echo "OTHER_LDFLAGS = \\$(inherited) -force_load $DM_LIBHAC_AOT_LIB -Wl,-u,_NativeAOT_StaticInitialization" >> Gen/dm.xcconfig
   t "linked LibHac iOS extractor: $DM_LIBHAC_AOT_LIB"
