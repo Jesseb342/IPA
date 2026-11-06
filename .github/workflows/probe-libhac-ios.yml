@@ -41,8 +41,31 @@ jobs:
 
           echo "Static library:"
           ls -lh "$LIBRARY"
-          echo "Exported probe symbol:"
-          xcrun nm -gU "$LIBRARY" | grep -E 'parabox_libhac_aot_probe$'
+          echo "Checking exported C ABI entry points:"
+          SYMBOLS="$(xcrun nm -gU "$LIBRARY")"
+          printf '%s\n' "$SYMBOLS" | grep -E 'parabox_libhac_aot_probe
+
+      - name: Upload NativeAOT probe library
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibHac-iOS-AOT-Probe
+          path: tools/LibHacAotProbe/bin/Release/net10.0/ios-arm64/publish/LibHacAotProbe.a
+          if-no-files-found: error
+          retention-days: 7
+
+          printf '%s\n' "$SYMBOLS" | grep -E 'parabox_extract_base_romfs
+
+      - name: Upload NativeAOT probe library
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibHac-iOS-AOT-Probe
+          path: tools/LibHacAotProbe/bin/Release/net10.0/ios-arm64/publish/LibHacAotProbe.a
+          if-no-files-found: error
+          retention-days: 7
+
+          echo "NativeAOT linked both the LibHac probe and the real NSP-to-RomFS entry point."
 
       - name: Upload NativeAOT probe library
         if: success()
