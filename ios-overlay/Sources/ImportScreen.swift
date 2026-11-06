@@ -487,18 +487,33 @@ private struct ImportScreenView: View {
     private func loadSavedFiles() {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let folder = documents.appendingPathComponent("Imports", isDirectory: true)
-        func existing(_ key: String) -> ImportedGameFile? {
+        func existing(_ key: String, kind: ImportKind) -> ImportedGameFile? {
             guard let data = defaults.data(forKey: key),
-                  let item = try? JSONDecoder().decode(ImportedGameFile.self, from: data),
-                  FileManager.default.fileExists(atPath: folder.appendingPathComponent(item.storedName).path) else { return nil }
+                  let item = try? JSONDecoder().decode(ImportedGameFile.self, from: data) else { return nil }
+            let url = folder.appendingPathComponent(item.storedName)
+            guard FileManager.default.fileExists(atPath: url.path),
+                  (try? ImportFileStorage.validate(url, kind: kind)) != nil else {
+                try? FileManager.default.removeItem(at: url)
+                defaults.removeObject(forKey: key)
+                return nil
+            }
             return item
         }
-        base = existing("nxn.import.base")
-        keys = existing("nxn.import.keys")
-        update = existing("nxn.import.update")
+        base = existing("nxn.import.base", kind: .base)
+        keys = existing("nxn.import.keys", kind: .keys)
+        update = existing("nxn.import.update", kind: .update)
         if let data = defaults.data(forKey: "nxn.import.dlc"),
            let saved = try? JSONDecoder().decode([ImportedGameFile].self, from: data) {
-            dlc = saved.filter { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0.storedName).path) }
+            dlc = saved.filter { item in
+                let url = folder.appendingPathComponent(item.storedName)
+                guard FileManager.default.fileExists(atPath: url.path),
+                      (try? ImportFileStorage.validate(url, kind: .dlc)) != nil else {
+                    try? FileManager.default.removeItem(at: url)
+                    return false
+                }
+                return true
+            }
+            saveDLC()
         }
     }
 
