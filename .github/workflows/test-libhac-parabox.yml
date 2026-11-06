@@ -30,14 +30,14 @@ jobs:
 
       - name: Download base NSP and decode prod.keys
         env:
-          GAME_URL: \${{ secrets.Game_URL }}
-          KEYS_BASE64: \${{ secrets.Keys_URL }}
+          GAME_URL: ${{ secrets.Game_URL }}
+          KEYS_BASE64: ${{ secrets.Keys_URL }}
         shell: bash
         run: |
           set -euo pipefail
           WORK="$RUNNER_TEMP/parabox-libhac-test"
           mkdir -p "$WORK/input" "$WORK/unpacked" "$WORK/output"
-          if [[ -z "\${GAME_URL:-}" || -z "\${KEYS_BASE64:-}" ]]; then
+          if [[ -z "${GAME_URL:-}" || -z "${KEYS_BASE64:-}" ]]; then
             echo "::error::Game_URL and Keys_URL secrets are required."
             exit 1
           fi
@@ -52,11 +52,11 @@ jobs:
           if file "$WORK/download" | grep -qi 'RAR archive'; then
             unar -o "$WORK/unpacked" "$WORK/download"
             mapfile -t NSP_FILES < <(find "$WORK/unpacked" -type f -iname '*.nsp' -print)
-            if [[ "\${#NSP_FILES[@]}" -ne 1 ]]; then
-              echo "::error::Expected exactly one NSP in the downloaded RAR; found \${#NSP_FILES[@]}."
+            if [[ "${#NSP_FILES[@]}" -ne 1 ]]; then
+              echo "::error::Expected exactly one NSP in the downloaded RAR; found ${#NSP_FILES[@]}."
               exit 1
             fi
-            cp "\${NSP_FILES[0]}" "$WORK/input/base.nsp"
+            cp "${NSP_FILES[0]}" "$WORK/input/base.nsp"
           else
             python - "$WORK/download" "$WORK/input/base.nsp" <<'PY'
           import shutil, sys
