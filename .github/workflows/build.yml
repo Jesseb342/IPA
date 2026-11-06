@@ -62,7 +62,7 @@ jobs:
           # curl alone often saves the HTML interstitial instead of the archive.
           if [[ "$GAME_URL" == *"drive.google.com"* || "$GAME_URL" == *"docs.google.com"* ]]; then
             echo "Google Drive URL detected; downloading with gdown."
-            gdown --fuzzy "$GAME_URL" --output "$DOWNLOAD.part"
+            gdown "$GAME_URL" -O "$DOWNLOAD.part"
           else
             curl --fail --location --show-error --progress-bar \
               --retry 3 --retry-delay 5 --connect-timeout 30 \
