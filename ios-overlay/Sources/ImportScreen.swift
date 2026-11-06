@@ -76,9 +76,12 @@ private enum ImportFileStorage {
         do { data = try Data(contentsOf: source, options: .mappedIfSafe) }
         catch { throw ImportValidationError.unreadable }
         guard data.count > 0, data.count <= 16 * 1024 * 1024,
-              let text = String(data: data, encoding: .utf8) else {
+              let decoded = String(data: data, encoding: .utf8) else {
             throw ImportValidationError.invalidKeys("file is empty, too large, or not UTF-8 text.")
         }
+        // Some editors prepend a UTF-8 byte-order mark; it is not part of the
+        // first key name and must be removed before parsing.
+        let text = decoded.hasPrefix("\u{FEFF}") ? String(decoded.dropFirst()) : decoded
 
         var parsed: [String: String] = [:]
         for (lineNumber, rawLine) in text.components(separatedBy: .newlines).enumerated() {
@@ -316,7 +319,7 @@ private struct ImportScreenView: View {
 
                     fileSection(
                         title: "Optional content",
-                        subtitle: "You can add these now or leave them out."
+                        subtitle: "You can add these now or leave them out. NSP container checks do not confirm that a file actually contains DLC."
                     ) {
                         fileRow(
                             title: "Game update",
