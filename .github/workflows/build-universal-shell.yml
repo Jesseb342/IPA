@@ -50,6 +50,69 @@ jobs:
           xcodebuild -version
           xcodegen --version
 
+      - name: Set up .NET 9 for NativeAOT probe
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build isolated LibHac NativeAOT metadata probe
+        id: metadata_probe
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          PROBE_ROOT="$RUNNER_TEMP/nxn-metadata-probe"
+          PUBLISH="$PROBE_ROOT/publish"
+          mkdir -p "$PUBLISH"
+          dotnet publish ipa-overlay/nativeaot-probe/NxNativeMetadataProbe.csproj \
+            --configuration Release \
+            --runtime ios-arm64 \
+            --output "$PUBLISH" \
+            > "$PROBE_ROOT/publish.log" 2>&1
+          RESULT=$?
+          tail -80 "$PROBE_ROOT/publish.log"
+          if [ "$RESULT" -eq 0 ]; then
+            DYLIB=$(find "$PUBLISH" -maxdepth 1 -name 'NxNativeMetadataProbe.dylib' -print -quit)
+            if [ -z "$DYLIB" ]; then
+              echo "NativeAOT publish succeeded but the expected dylib was not found."
+              exit 1
+            fi
+            FRAMEWORK="$PROBE_ROOT/NxNativeMetadataProbe.framework"
+            mkdir -p "$FRAMEWORK"
+            cp "$DYLIB" "$FRAMEWORK/NxNativeMetadataProbe"
+            install_name_tool -rpath @executable_path @executable_path/Frameworks "$FRAMEWORK/NxNativeMetadataProbe"
+            install_name_tool -id @rpath/NxNativeMetadataProbe.framework/NxNativeMetadataProbe "$FRAMEWORK/NxNativeMetadataProbe"
+            cat > "$FRAMEWORK/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>NxNativeMetadataProbe</string>
+            <key>CFBundleIdentifier</key><string>org.nxnative.metadata-probe</string>
+            <key>CFBundleName</key><string>NxNativeMetadataProbe</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+            <key>CFBundleVersion</key><string>1</string>
+          </dict>
+          </plist>
+          PLIST
+            (cd "$PROBE_ROOT" && zip -qry nxnative-metadata-probe-framework.zip NxNativeMetadataProbe.framework)
+            echo "NativeAOT framework packaged successfully."
+          else
+            echo "NativeAOT probe did not compile; the main shell build will continue."
+          fi
+          exit "$RESULT"
+
+      - name: Upload LibHac NativeAOT probe and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxnative-metadata-probe-diagnostics
+          path: |
+            ${{ runner.temp }}/nxn-metadata-probe/publish.log
+            ${{ runner.temp }}/nxn-metadata-probe/nxnative-metadata-probe-framework.zip
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Apply IPA import-screen overlay
         shell: bash
         run: |
