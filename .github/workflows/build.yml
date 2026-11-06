@@ -162,6 +162,85 @@ jobs:
           print("Configured the build to omit game RomFS from the IPA.")
           PY
 
+          # First-launch import: copy an extracted RomFS directory from Files.
+          # NSP/key extraction will be added as a separate stage.
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("dm/ios/Sources/front_ios.m")
+          s = p.read_text()
+          s = s.replace("#import <AVFAudio/AVFAudio.h>", "#import <AVFAudio/AVFAudio.h>\n#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>", 1)
+          s = s.replace("@interface DmRootVC : UIViewController", "@interface DmRootVC : UIViewController <UIDocumentPickerDelegate>\n@property (nonatomic, strong) UILabel *importStatus;", 1)
+          old = 'lb.text = @"Game files not found.\\\\nPut the RomFS folder into this App\\'s Documents as \\\\"romfs\\\\" (Files app), then restart.";'
+          new = 'lb.text = @"Game files are missing. Use the button below to import your extracted RomFS folder.";'
+          if s.count(old) != 1:
+              raise SystemExit("Could not locate the missing-game instructions.")
+          s = s.replace(old, new, 1)
+          s = s.replace('[self.view addSubview:lb]; return;', '''[self.view addSubview:lb];
+                  UIButton *choose = [UIButton buttonWithType:UIButtonTypeSystem];
+                  choose.translatesAutoresizingMaskIntoConstraints = NO;
+                  [choose setTitle:@"Choose RomFS Folder" forState:UIControlStateNormal];
+                  choose.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+                  choose.backgroundColor = UIColor.whiteColor;
+                  [choose setTitleColor:UIColor.blackColor forState:UIControlStateNormal];
+                  choose.layer.cornerRadius = 12;
+                  choose.contentEdgeInsets = UIEdgeInsetsMake(14, 24, 14, 24);
+                  [choose addTarget:self action:@selector(dm_chooseRomFS) forControlEvents:UIControlEventTouchUpInside];
+                  [self.view addSubview:choose];
+                  [NSLayoutConstraint activateConstraints:@[
+                      [choose.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+                      [choose.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:90]
+                  ]];
+                  return;''', 1)
+          anchor = '- (void)viewDidLayoutSubviews {'
+          methods = r"""- (void)dm_chooseRomFS {
+              UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeFolder] asCopy:NO];
+              picker.delegate = self;
+              [self presentViewController:picker animated:YES completion:nil];
+          }
+          - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+              (void)controller;
+              NSURL *picked = urls.firstObject;
+              if (!picked) return;
+              BOOL scoped = [picked startAccessingSecurityScopedResource];
+              NSFileManager *fm = NSFileManager.defaultManager;
+              NSString *doc = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
+              NSURL *target = [NSURL fileURLWithPath:[doc stringByAppendingPathComponent:@"romfs"] isDirectory:YES];
+              NSURL *stage = [NSURL fileURLWithPath:[doc stringByAppendingPathComponent:@"romfs.importing"] isDirectory:YES];
+              NSURL *backup = [NSURL fileURLWithPath:[doc stringByAppendingPathComponent:@"romfs.previous"] isDirectory:YES];
+              NSError *error = nil;
+              NSNumber *isDir = nil;
+              [picked getResourceValue:&isDir forKey:NSURLIsDirectoryKey error:&error];
+              [fm removeItemAtURL:stage error:nil];
+              [fm removeItemAtURL:backup error:nil];
+              if (!error && isDir.boolValue) {
+                  NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+                  [coordinator coordinateReadingItemAtURL:picked options:0 error:&error byAccessor:^(NSURL *readURL) {
+                      [fm copyItemAtURL:readURL toURL:stage error:&error];
+                  }];
+              } else if (!error) {
+                  error = [NSError errorWithDomain:@"ParaboxImporter" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Select an extracted RomFS folder, not an NSP file."}];
+              }
+              if (!error && [fm fileExistsAtPath:target.path]) [fm moveItemAtURL:target toURL:backup error:&error];
+              if (!error) [fm moveItemAtURL:stage toURL:target error:&error];
+              if (error) {
+                  [fm removeItemAtURL:stage error:nil];
+                  if (![fm fileExistsAtPath:target.path] && [fm fileExistsAtPath:backup.path]) [fm moveItemAtURL:backup toURL:target error:nil];
+                  lb.text = [NSString stringWithFormat:@"Import failed: %@", error.localizedDescription];
+              } else {
+                  [target setResourceValue:@YES forKey:NSURLIsExcludedFromBackupKey error:nil];
+                  lb.text = @"RomFS copied. Fully close this app, then reopen it to launch the game.";
+              }
+              if (scoped) [picked stopAccessingSecurityScopedResource];
+          }
+          - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller { (void)controller; }
+          """
+          if s.count(anchor) != 1:
+              raise SystemExit("Could not find frontend insertion point.")
+          s = s.replace(anchor, methods + "\n" + anchor, 1)
+          p.write_text(s)
+          print("Added the first-launch RomFS folder importer.")
+          PY
+
       - name: Detect game title ID and select shader profile
         shell: bash
         run: |
