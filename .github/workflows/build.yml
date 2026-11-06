@@ -236,6 +236,9 @@ jobs:
           - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller { (void)controller; }
           """
           methods = methods.replace("lb.text =", "self.importStatus.text =")
+          methods = methods.replace("NSError *error = nil;", "__block NSError *error = nil;")
+          methods = methods.replace("if (!error && isDir.boolValue) {", 'if (!error && isDir.boolValue && ![fm fileExistsAtPath:[[picked URLByAppendingPathComponent:@DM_GAME_ROMFS_MARKER] path]]) { error = [NSError errorWithDomain:@"ParaboxImporter" code:2 userInfo:@{NSLocalizedDescriptionKey:@"That folder does not contain the RomFS marker for this game."}]; }\n              if (!error && isDir.boolValue) {')
+          s = s.replace('#include "dm.h"', '#include "dm.h"\n#include "game_profile.h"', 1)
           if s.count(anchor) != 1:
               raise SystemExit("Could not find frontend insertion point.")
           s = s.replace(anchor, methods + "\n" + anchor, 1)
