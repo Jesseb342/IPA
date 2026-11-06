@@ -57,7 +57,7 @@ private enum MetadataProbe {
                 : "The metadata engine rejected the input paths (code \(result)).")
         }
 
-        let response = String(cString: output)
+        let response = output.withUnsafeBufferPointer { buffer in String(cString: buffer.baseAddress!) }
         if response.hasPrefix("error|") {
             throw ImportValidationError.metadata(String(response.dropFirst(6)))
         }
