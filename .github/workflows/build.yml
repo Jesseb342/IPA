@@ -209,6 +209,88 @@ jobs:
               raise SystemExit("No supported base game package was prepared.")
           PY
 
+      - name: Download Parabox update NSP
+        env:
+          UPDATE_URL: ${{ secrets.Update_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          GAME_DIR="$RUNNER_TEMP/GameFiles"
+          WORK="$RUNNER_TEMP/parabox"
+          DOWNLOAD="$WORK/update.download"
+          EXTRACT="$WORK/update-extracted"
+          mkdir -p "$GAME_DIR" "$WORK" "$EXTRACT"
+
+          if [[ -z "${UPDATE_URL:-}" ]]; then
+            echo "::error::Update_URL secret is empty."
+            exit 1
+          fi
+
+          if [[ "$UPDATE_URL" == *"drive.google.com"* || "$UPDATE_URL" == *"docs.google.com"* ]]; then
+            echo "Google Drive URL detected; downloading update with gdown."
+            gdown "$UPDATE_URL" -O "$DOWNLOAD.part"
+          else
+            curl --fail --location --show-error --progress-bar \
+              --retry 3 --retry-delay 5 --connect-timeout 30 \
+              --output "$DOWNLOAD.part" "$UPDATE_URL"
+          fi
+          test -s "$DOWNLOAD.part"
+          mv "$DOWNLOAD.part" "$DOWNLOAD"
+
+          python - "$DOWNLOAD" "$EXTRACT" "$GAME_DIR" <<'PY'
+          import shutil, struct, subprocess, sys
+          from pathlib import Path
+
+          source, extracted, game_dir = map(Path, sys.argv[1:])
+          with source.open("rb") as f:
+              magic = f.read(8)
+
+          if magic[:4] == b"PFS0":
+              package = source
+          elif magic.startswith(b"Rar!") or magic.startswith(b"PK\\x03\\x04"):
+              subprocess.run(["unar", "-o", str(extracted), str(source)], check=True)
+              packages = sorted(p for p in extracted.rglob("*")
+                                if p.is_file() and p.suffix.lower() == ".nsp")
+              if len(packages) != 1:
+                  raise SystemExit(f"Expected exactly one update NSP in archive; found {len(packages)}.")
+              package = packages[0]
+          else:
+              raise SystemExit(f"Update URL did not return an NSP or supported archive; first bytes: {magic.hex(' ')}")
+
+          with package.open("rb") as f:
+              header = f.read(16)
+              if len(header) != 16 or header[:4] != b"PFS0":
+                  raise SystemExit("The selected update file is not a valid PFS0 NSP.")
+              count, string_size = struct.unpack_from("<II", header, 4)
+              if count > 100000 or string_size > 100000000:
+                  raise SystemExit("Invalid PFS0 header in update NSP.")
+              entries = f.read(count * 0x18)
+              strings = f.read(string_size)
+              if len(entries) != count * 0x18:
+                  raise SystemExit("Truncated PFS0 directory in update NSP.")
+              names = []
+              for i in range(count):
+                  offset = struct.unpack_from("<I", entries, i * 0x18 + 0x10)[0]
+                  if offset < len(strings):
+                      end = strings.find(b"\\0", offset)
+                      if end >= 0:
+                          names.append(strings[offset:end].decode(errors="replace"))
+
+          ticket_ids = {n[:16].upper() for n in names
+                        if len(n) == 36 and n.lower().endswith(".tik")}
+          expected = "0100E44016C22800"
+          if ticket_ids and ticket_ids != {expected}:
+              raise SystemExit(f"Update ticket title ID mismatch: {sorted(ticket_ids)}; expected {expected}.")
+
+          # The title-ID tag lets NxNative classify this as the Parabox update
+          # even if the NSP has no common ticket. A lone unversioned update is
+          # associated with the profile's registered update version (v65536).
+          target = game_dir / f"update [{expected}].nsp"
+          shutil.copy2(package, target)
+          print(f"Prepared update NSP: {target.name} ({target.stat().st_size:,} bytes)")
+          print(f"NSP entries: {len(names)}; ticket title IDs: {sorted(ticket_ids) if ticket_ids else 'not present'}")
+          PY
+
       - name: Configure IPA to keep RomFS external
         shell: bash
         run: |
