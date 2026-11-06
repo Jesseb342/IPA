@@ -32,44 +32,46 @@ public static class ParaboxExtractor
     {
         try
         {
-            string keysPath = RequiredPath(keysPathPtr, "prod.keys");
-            string nspPath = RequiredPath(nspPathPtr, "NSP");
-            string destinationPath = RequiredPath(destinationPathPtr, "destination");
-
-            if (!File.Exists(keysPath)) throw new FileNotFoundException("prod.keys was not found.");
-            if (!File.Exists(nspPath)) throw new FileNotFoundException("The selected NSP was not found.");
-
-            string parent = Path.GetDirectoryName(destinationPath);
-            if (string.IsNullOrEmpty(parent)) throw new IOException("The destination must have a parent directory.");
-            Directory.CreateDirectory(parent);
-
-            string staging = destinationPath + ".importing";
-            string backup = destinationPath + ".previous";
-            if (Directory.Exists(staging)) Directory.Delete(staging, true);
-            if (Directory.Exists(backup)) Directory.Delete(backup, true);
-            Directory.CreateDirectory(staging);
-
-            try
-            {
-                Extract(keysPath, nspPath, staging);
-                if (Directory.Exists(destinationPath))
-                    Directory.Move(destinationPath, backup);
-                Directory.Move(staging, destinationPath);
-                if (Directory.Exists(backup)) Directory.Delete(backup, true);
-                return 0;
-            }
-            catch
-            {
-                if (Directory.Exists(staging)) Directory.Delete(staging, true);
-                if (!Directory.Exists(destinationPath) && Directory.Exists(backup))
-                    Directory.Move(backup, destinationPath);
-                throw;
-            }
+            ExtractBaseRomFsManaged(
+                RequiredPath(keysPathPtr, "prod.keys"),
+                RequiredPath(nspPathPtr, "NSP"),
+                RequiredPath(destinationPathPtr, "destination"));
+            return 0;
         }
         catch (Exception ex)
         {
             WriteError(errorPtr, errorCapacity, ex.Message);
             return 1;
+        }
+    }
+
+    // Shared implementation: called by the iOS C ABI and the macOS validation harness.
+    public static void ExtractBaseRomFsManaged(string keysPath, string nspPath, string destinationPath)
+    {
+        if (!File.Exists(keysPath)) throw new FileNotFoundException("prod.keys was not found.");
+        if (!File.Exists(nspPath)) throw new FileNotFoundException("The selected NSP was not found.");
+        string parent = Path.GetDirectoryName(destinationPath);
+        if (string.IsNullOrEmpty(parent)) throw new IOException("The destination must have a parent directory.");
+        Directory.CreateDirectory(parent);
+
+        string staging = destinationPath + ".importing";
+        string backup = destinationPath + ".previous";
+        if (Directory.Exists(staging)) Directory.Delete(staging, true);
+        if (Directory.Exists(backup)) Directory.Delete(backup, true);
+        Directory.CreateDirectory(staging);
+        try
+        {
+            Extract(keysPath, nspPath, staging);
+            if (Directory.Exists(destinationPath)) Directory.Move(destinationPath, backup);
+            Directory.Move(staging, destinationPath);
+            if (Directory.Exists(backup)) Directory.Delete(backup, true);
+        }
+        catch
+        {
+            if (Directory.Exists(staging)) Directory.Delete(staging, true);
+            if (!Directory.Exists(destinationPath) && Directory.Exists(backup))
+                Directory.Move(backup, destinationPath);
+            throw;
         }
     }
 
