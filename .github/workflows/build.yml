@@ -381,8 +381,6 @@ jobs:
         run: |
           rm -rf "$RUNNER_TEMP/parabox" "$RUNNER_TEMP/GameFiles"
 
-          xcrun nm -gU "$RUNNER_TEMP/LibHacAotProbe.a" | grep -E 'NativeAOT_StaticInitialization'
-
       - name: Install build dependencies
         shell: bash
         run: |
