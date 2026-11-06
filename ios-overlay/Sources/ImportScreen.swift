@@ -57,6 +57,8 @@ private enum ImportValidationError: LocalizedError {
 
 private enum ImportFileStorage {
     static func validate(_ source: URL, kind: ImportKind) throws {
+        let accessed = source.startAccessingSecurityScopedResource()
+        defer { if accessed { source.stopAccessingSecurityScopedResource() } }
         switch kind {
         case .keys:
             try validateKeys(source)
