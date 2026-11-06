@@ -9,6 +9,7 @@ using LibHac.Fs;
 using LibHac.Fs.Fsa;
 using LibHac.Tools.Fs;
 using LibHac.Tools.FsSystem.NcaUtils;
+using LibHac.Tools.FsSystem.RomFs;
 
 public static class ParaboxExtractor
 {
