@@ -190,7 +190,6 @@ jobs:
         with:
           name: Parabox-Build-Diagnostics
           path: |
-            ${{ runner.temp }}/parabox/
             ${{ github.workspace }}/**/logs/
             ${{ github.workspace }}/**/*_survey/
           if-no-files-found: warn
@@ -200,4 +199,4 @@ jobs:
         if: always()
         shell: bash
         run: |
-          rm -rf "$RUNNER_TEMP/parabox"
+          rm -rf "$RUNNER_TEMP/parabox" "$RUNNER_TEMP/GameFiles"
