@@ -50,6 +50,50 @@ jobs:
           # The exported C entry point above is the required integration check.
           # NativeAOT runtime initialization symbols are toolchain-version dependent.
 
+      - name: Prepare NativeAOT iOS runtime linker inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANIFEST="$GITHUB_WORKSPACE/ipa-tools/tools/LibHacAotProbe/native-link-inputs.txt"
+          test -s "$MANIFEST"
+          python - "$MANIFEST" <<'PY'
+          import os
+          import sys
+          from pathlib import Path
+
+          manifest = Path(sys.argv[1])
+          flags = []
+          counts = {"LIB": 0, "FRAMEWORK": 0, "SYSTEM": 0}
+          for line_number, raw in enumerate(manifest.read_text().splitlines(), 1):
+              if not raw.strip():
+                  continue
+              try:
+                  kind, value = raw.split("|", 1)
+              except ValueError:
+                  raise SystemExit(f"Malformed NativeAOT linker manifest line {line_number}")
+              if kind == "LIB":
+                  path = Path(value)
+                  if not path.is_file():
+                      raise SystemExit(f"NativeAOT runtime archive is missing: {path}")
+                  # Xcode's OTHER_LDFLAGS is parsed by clang; quote absolute paths.
+                  flags.append('"' + str(path).replace('"', '\\"') + '"')
+              elif kind == "FRAMEWORK":
+                  flags.extend(["-framework", value])
+              elif kind == "SYSTEM":
+                  flags.append("-l" + value)
+              else:
+                  raise SystemExit(f"Unknown NativeAOT linker input type on line {line_number}: {kind}")
+              counts[kind] += 1
+
+          if not counts["LIB"]:
+              raise SystemExit("NativeAOT manifest contains no runtime archives.")
+          rendered = " ".join(flags)
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              env.write("DM_LIBHAC_AOT_LINK_INPUTS=" + str(manifest) + "\\n")
+              env.write("DM_LIBHAC_AOT_LINK_FLAGS=" + rendered + "\\n")
+          print("Prepared NativeAOT linker inputs: " + ", ".join(f"{k.lower()}={v}" for k, v in counts.items()))
+          PY
+
       - name: Install build dependencies
         shell: bash
         run: |
