@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Runtime.CompilerServices;
@@ -7,9 +8,12 @@ using LibHac.Common;
 using LibHac.Common.Keys;
 using LibHac.Fs;
 using LibHac.Fs.Fsa;
+using LibHac.FsSystem;
+using LibHac.Spl;
 using LibHac.Tools.Fs;
 using LibHac.Tools.FsSystem.NcaUtils;
 using LibHac.Tools.FsSystem.RomFs;
+using Path = System.IO.Path;
 
 public static class ParaboxExtractor
 {
@@ -88,22 +92,10 @@ public static class ParaboxExtractor
     private static void Extract(string keysPath, string nspPath, string output)
     {
         KeySet keys = ExternalKeyReader.ReadKeyFile(keysPath);
-        var storage = new LocalStorage(nspPath, FileAccess.Read);
-        byte[] magic = new byte[4];
-        storage.Read(0x100, magic).ThrowIfFailure();
-        if (Encoding.ASCII.GetString(magic) == "HEAD")
-            throw new NotSupportedException("This first on-device importer supports NSP files, not XCI.");
-
-        var package = new PartitionFileSystem();
-        package.Initialize(storage).ThrowIfFailure();
-
+        List<Nca> ncas = OpenNsp(keys, nspPath);
         Nca program = null;
-        foreach (DirectoryEntryEx entry in package.EnumerateEntries("*", SearchOptions.Default))
+        foreach (Nca nca in ncas)
         {
-            if (!entry.Name.EndsWith(".nca", StringComparison.OrdinalIgnoreCase)) continue;
-            using var file = new UniqueRef<IFile>();
-            package.OpenFile(ref file.Ref, entry.FullPath.ToU8Span(), OpenMode.Read).ThrowIfFailure();
-            var nca = new Nca(keys, file.Release().AsStorage());
             if (nca.Header.ContentType == NcaContentType.Program)
             {
                 program = nca;
@@ -111,10 +103,51 @@ public static class ParaboxExtractor
             }
         }
 
-        if (program == null) throw new InvalidDataException("No Program NCA was found in the selected NSP.");
-        IStorage romfsStorage = program.OpenStorage(NcaSectionType.Data, IntegrityCheckLevel.ErrorOnInvalid);
+        if (program == null)
+            throw new InvalidDataException("No Program NCA was found in the selected NSP.");
+
+        IStorage romfsStorage = program.OpenStorage(
+            NcaSectionType.Data, IntegrityCheckLevel.ErrorOnInvalid);
         var romfs = new RomFsFileSystem(romfsStorage);
         CopyRomFs(romfs, output);
+    }
+
+    // Match NxNative's nx_extract package handling: import common tickets
+    // before constructing NCAs, because NSP program content may be rights-managed.
+    private static List<Nca> OpenNsp(KeySet keys, string nspPath)
+    {
+        var storage = new LocalStorage(nspPath, FileAccess.Read);
+        byte[] magic = new byte[4];
+        storage.Read(0x100, magic).ThrowIfFailure();
+        if (Encoding.ASCII.GetString(magic) == "HEAD")
+            throw new NotSupportedException("This importer supports NSP files, not XCI.");
+
+        var package = new PartitionFileSystem();
+        package.Initialize(storage).ThrowIfFailure();
+
+        var ncas = new List<Nca>();
+        foreach (DirectoryEntryEx entry in package.EnumerateEntries("*", SearchOptions.Default))
+        {
+            using var file = new UniqueRef<IFile>();
+            package.OpenFile(ref file.Ref, entry.FullPath.ToU8Span(), OpenMode.Read).ThrowIfFailure();
+            IStorage itemStorage = file.Release().AsStorage();
+
+            if (entry.Name.EndsWith(".tik", StringComparison.OrdinalIgnoreCase))
+            {
+                byte[] ticket = new byte[0x2c0];
+                itemStorage.Read(0, ticket).ThrowIfFailure();
+                if (ticket[0x281] != 0)
+                    throw new InvalidDataException("The NSP contains a personalized ticket; this importer currently supports common tickets only.");
+                keys.ExternalKeySet.Add(
+                    new RightsId(ticket.AsSpan(0x2a0, 0x10)),
+                    new AccessKey(ticket.AsSpan(0x180, 0x10))).ThrowIfFailure();
+            }
+            else if (entry.Name.EndsWith(".nca", StringComparison.OrdinalIgnoreCase))
+            {
+                ncas.Add(new Nca(keys, itemStorage));
+            }
+        }
+        return ncas;
     }
 
     private static void CopyRomFs(IFileSystem fileSystem, string destination)
