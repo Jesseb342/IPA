@@ -154,6 +154,8 @@ jobs:
           cp -R "$RUNNER_TEMP/NxNativeMetadataProbe.framework" "$FRAMEWORK"
           test -s "$FRAMEWORK/NxNativeMetadataProbe"
           test -s "$FRAMEWORK/Info.plist"
+          nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nsp'
+          nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_extract_game'
 
           # The shell builder signs the app before this framework exists.
           # Sign the nested framework first, then re-sign the containing app.
