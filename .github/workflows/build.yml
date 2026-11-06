@@ -365,14 +365,23 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Collect build diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/build-diagnostics"
+          if [ -d "$RUNNER_TEMP/GameFiles" ]; then
+            find "$RUNNER_TEMP/GameFiles" -type d -name logs -exec cp -R {} "$GITHUB_WORKSPACE/build-diagnostics/" \\;
+            find "$RUNNER_TEMP/GameFiles" -type d -name '*_survey' -exec cp -R {} "$GITHUB_WORKSPACE/build-diagnostics/" \\;
+          fi
+          find "$GITHUB_WORKSPACE/build-diagnostics" -maxdepth 3 -type f -print
+
       - name: Upload build logs and survey/profile data
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Parabox-Build-Diagnostics
-          path: |
-            ${{ github.workspace }}/**/logs/
-            ${{ github.workspace }}/**/*_survey/
+          path: ${{ github.workspace }}/build-diagnostics/
           if-no-files-found: warn
           retention-days: 14
 
