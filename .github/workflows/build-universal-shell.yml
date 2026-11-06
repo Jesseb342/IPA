@@ -1,0 +1,98 @@
+name: Build Universal NxNative Shell
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: universal-shell-build
+  cancel-in-progress: false
+
+jobs:
+  build-shell:
+    name: Build game-free iOS shell
+    # Match the upstream shell build's required Xcode 27 SDK.
+    runs-on: xcode-27
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout ns2ios-shell source
+        uses: actions/checkout@v4
+        with:
+          repository: xinerqu/ns2ios-shell
+          ref: main
+          fetch-depth: 1
+
+      - name: Record source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "UPSTREAM_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "Building upstream ns2ios-shell at $(git rev-parse HEAD)"
+
+      - name: Install shell build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install xcodegen
+          python3 -m pip install --quiet --break-system-packages fonttools \
+            || python3 -m pip install --quiet fonttools
+          python3 -c "import fontTools; print('fontTools', fontTools.version)"
+          xcodebuild -version
+          xcodegen --version
+
+      - name: Build game-free shell
+        shell: bash
+        env:
+          DM_ROOT: ${{ runner.temp }}/nxnative-shell
+        run: |
+          set -euo pipefail
+          bash dm/ios/tools/shell_build.sh
+          SHELL_ZIP="$DM_ROOT/build/shell/nxnative-shell-build-input.zip"
+          test -s "$SHELL_ZIP"
+          ls -lh "$SHELL_ZIP"
+
+      - name: Verify shell contains no game payload
+        shell: bash
+        env:
+          DM_ROOT: ${{ runner.temp }}/nxnative-shell
+        run: |
+          set -euo pipefail
+          APP="$DM_ROOT/build/shell/app"
+          test -d "$APP"
+          test -s "$APP/dm/shell_info.txt"
+          grep -q '^KIND=ios$' "$APP/dm/shell_info.txt"
+          grep -q '^GUEST=1$' "$APP/dm/shell_info.txt"
+          grep -q '^ENV=1$' "$APP/dm/shell_info.txt"
+          for item in romfs msl aoc Frameworks; do
+            if [ -e "$APP/$item" ]; then
+              echo "::error::Game-specific payload unexpectedly present: $item"
+              exit 1
+            fi
+          done
+          if find "$APP" -type f \( -iname '*.nsp' -o -iname '*.xci' -o -iname '*.nca' -o -iname '*.tik' -o -iname '*.keys' -o -iname 'prod.keys' \) | grep -q .; then
+            echo "::error::A game package or key file was found in the shell."
+            exit 1
+          fi
+          echo "Shell metadata:"
+          cat "$APP/dm/shell_info.txt"
+          echo "Shell file count: $(find "$APP" -type f | wc -l | tr -d ' ')"
+
+      - name: Upload universal shell build input
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxnative-universal-shell
+          path: ${{ runner.temp }}/nxnative-shell/build/shell/nxnative-shell-build-input.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload shell diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxnative-shell-diagnostics
+          path: ${{ runner.temp }}/nxnative-shell/build/shell/
+          if-no-files-found: warn
+          retention-days: 7
