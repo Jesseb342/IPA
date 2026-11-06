@@ -93,12 +93,12 @@ private enum GameExtractor {
                 .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
             guard let handle = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
                 let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
-                throw ImportValidationError.metadata("Could not load the extraction engine: \\(detail)")
+                throw ImportValidationError.metadata("Could not load the extraction engine: \(detail)")
             }
             guard let symbol = dlsym(handle, "nxn_extract_game") else {
                 let detail = dlerror().map { String(cString: $0) } ?? "symbol not found"
                 dlclose(handle)
-                throw ImportValidationError.metadata("The extraction engine is missing its extraction function: \\(detail)")
+                throw ImportValidationError.metadata("The extraction engine is missing its extraction function: \(detail)")
             }
             frameworkHandle = handle
             extractFunction = unsafeBitCast(symbol, to: ExtractFunction.self)
@@ -123,8 +123,8 @@ private enum GameExtractor {
 
         let response = output.withUnsafeBufferPointer { buffer in String(cString: buffer.baseAddress!) }
         guard result == 0 else {
-            let detail = response.isEmpty ? "The native extractor returned code \\(result)." : response
-            throw ImportValidationError.metadata("Extraction stopped (code \\(result)).\\n\\(detail)")
+            let detail = response.isEmpty ? "The native extractor returned code \(result)." : response
+            throw ImportValidationError.metadata("Extraction stopped (code \(result)).\n\(detail)")
         }
         return response
     }
@@ -801,12 +801,12 @@ private struct ImportScreenView: View {
         let baseURL = storedURL(for: base)
         let updateURL = updateVerified ? update.map { storedURL(for: $0) } : nil
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let temporary = documents.appendingPathComponent("PreparedGame-\\(UUID().uuidString)", isDirectory: true)
+        let temporary = documents.appendingPathComponent("PreparedGame-\(UUID().uuidString)", isDirectory: true)
         let destination = documents.appendingPathComponent("PreparedGame", isDirectory: true)
 
         do {
             try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
-            status = "Extracting the base game\\(updateURL == nil ? "" : " and update")…"
+            status = "Extracting the base game\(updateURL == nil ? "" : " and update")…"
             let log = try await Task.detached(priority: .userInitiated) {
                 try GameExtractor.extract(
                     keysURL: keyURL,
@@ -820,7 +820,7 @@ private struct ImportScreenView: View {
             let romfs = temporary.appendingPathComponent("RomFS.img")
             guard FileManager.default.fileExists(atPath: exefs.path),
                   FileManager.default.fileExists(atPath: romfs.path) else {
-                throw ImportValidationError.metadata("The extractor returned success but did not create both ExeFS and RomFS.img.\\n\\(log)")
+                throw ImportValidationError.metadata("The extractor returned success but did not create both ExeFS and RomFS.img.\n\(log)")
             }
 
             if FileManager.default.fileExists(atPath: destination.path) {
@@ -837,7 +837,7 @@ private struct ImportScreenView: View {
         } catch {
             try? FileManager.default.removeItem(at: temporary)
             extractionLog = error.localizedDescription
-            status = "Extraction failed: \\(error.localizedDescription)"
+            status = "Extraction failed: \(error.localizedDescription)"
         }
         extracting = false
     }
