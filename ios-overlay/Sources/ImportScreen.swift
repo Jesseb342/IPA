@@ -28,11 +28,155 @@ private enum ImportKind: String, Identifiable, Sendable {
 private struct ImportedGameFile: Codable, Identifiable, Equatable, Sendable {
     let displayName: String
     let storedName: String
+    let validationStatus: String?
     var id: String { storedName }
 }
 
+private enum ImportValidationError: LocalizedError {
+    case unreadable
+    case invalidKeys(String)
+    case missingKey(String)
+    case invalidContainer(String)
+    case noNCA
+
+    var errorDescription: String? {
+        switch self {
+        case .unreadable:
+            return "The selected file could not be read."
+        case .invalidKeys(let reason):
+            return "Invalid prod.keys file: \(reason)"
+        case .missingKey(let key):
+            return "The keys file is missing a required key: \(key)."
+        case .invalidContainer(let reason):
+            return "Invalid NSP container: \(reason)"
+        case .noNCA:
+            return "The NSP contains no NCA content files."
+        }
+    }
+}
+
 private enum ImportFileStorage {
-    static func copyIntoAppStorage(_ source: URL, prefix: String) throws -> ImportedGameFile {
+    static func validate(_ source: URL, kind: ImportKind) throws {
+        switch kind {
+        case .keys:
+            try validateKeys(source)
+        case .base, .update, .dlc:
+            try validateNSP(source)
+        }
+    }
+
+    private static func validateKeys(_ source: URL) throws {
+        let data: Data
+        do { data = try Data(contentsOf: source, options: .mappedIfSafe) }
+        catch { throw ImportValidationError.unreadable }
+        guard data.count > 0, data.count <= 16 * 1024 * 1024,
+              let text = String(data: data, encoding: .utf8) else {
+            throw ImportValidationError.invalidKeys("file is empty, too large, or not UTF-8 text.")
+        }
+
+        var parsed: [String: String] = [:]
+        for (lineNumber, rawLine) in text.components(separatedBy: .newlines).enumerated() {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            if line.isEmpty || line.hasPrefix("#") { continue }
+            guard let separator = line.firstIndex(of: "=") else {
+                throw ImportValidationError.invalidKeys("line \(lineNumber + 1) is not a key=value entry.")
+            }
+            let name = String(line[..<separator]).trimmingCharacters(in: .whitespaces)
+            let value = String(line[line.index(after: separator)...])
+                .trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty,
+                  name.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "_")).contains($0) }) else {
+                throw ImportValidationError.invalidKeys("line \(lineNumber + 1) has an invalid key name.")
+            }
+            guard !value.isEmpty, value.count.isMultiple(of: 2),
+                  value.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "0123456789abcdefABCDEF").contains($0) }) else {
+                throw ImportValidationError.invalidKeys("line \(lineNumber + 1) has a non-hexadecimal or incomplete value.")
+            }
+            parsed[name.lowercased()] = value
+        }
+
+        guard let headerKey = parsed["header_key"], headerKey.count == 64 else {
+            throw ImportValidationError.missingKey("header_key (32-byte hexadecimal value)")
+        }
+        let hasMasterKey = parsed.contains { name, value in
+            name.range(of: #"^master_key_[0-9a-f]{2}$"#, options: .regularExpression) != nil && value.count == 64
+        }
+        guard hasMasterKey else {
+            throw ImportValidationError.missingKey("at least one 32-byte master_key_XX entry")
+        }
+    }
+
+    private static func validateNSP(_ source: URL) throws {
+        let attributes: [FileAttributeKey: Any]
+        do { attributes = try FileManager.default.attributesOfItem(atPath: source.path) }
+        catch { throw ImportValidationError.unreadable }
+        guard let fileSize = (attributes[.size] as? NSNumber)?.uint64Value, fileSize >= 16 else {
+            throw ImportValidationError.invalidContainer("file is too small to contain a PFS0 header.")
+        }
+
+        let handle: FileHandle
+        do { handle = try FileHandle(forReadingFrom: source) }
+        catch { throw ImportValidationError.unreadable }
+        defer { try? handle.close() }
+
+        let header = try handle.read(upToCount: 16) ?? Data()
+        guard header.count == 16, String(data: header.prefix(4), encoding: .ascii) == "PFS0" else {
+            throw ImportValidationError.invalidContainer("missing PFS0 package signature.")
+        }
+
+        let count = UInt64(readLE32(header, 4))
+        let stringSize = UInt64(readLE32(header, 8))
+        guard count > 0, count <= 100_000 else {
+            throw ImportValidationError.invalidContainer("file-entry count is invalid.")
+        }
+        let entriesSize = count * 0x18
+        let metadataSize = 16 + entriesSize + stringSize
+        guard metadataSize <= fileSize, metadataSize <= 64 * 1024 * 1024 else {
+            throw ImportValidationError.invalidContainer("file table exceeds the package bounds.")
+        }
+
+        let remainder = try handle.read(upToCount: Int(metadataSize - 16)) ?? Data()
+        guard remainder.count == Int(metadataSize - 16) else {
+            throw ImportValidationError.invalidContainer("file table is truncated.")
+        }
+        var table = header
+        table.append(remainder)
+
+        let stringsStart = 16 + Int(entriesSize)
+        let stringsEnd = stringsStart + Int(stringSize)
+        var ncaCount = 0
+        for index in 0..<Int(count) {
+            let entry = 16 + index * 0x18
+            let offset = readLE64(table, entry)
+            let size = readLE64(table, entry + 8)
+            let nameOffset = UInt64(readLE32(table, entry + 16))
+            guard size > 0, offset <= fileSize, size <= fileSize,
+                  metadataSize <= fileSize, offset <= fileSize - metadataSize,
+                  size <= fileSize - metadataSize - offset,
+                  nameOffset < stringSize else {
+                throw ImportValidationError.invalidContainer("an entry has an invalid size, offset, or name.")
+            }
+            let nameStart = stringsStart + Int(nameOffset)
+            guard nameStart < stringsEnd,
+                  let terminator = table[nameStart..<stringsEnd].firstIndex(of: 0),
+                  terminator > nameStart,
+                  let name = String(data: table[nameStart..<terminator], encoding: .utf8) else {
+                throw ImportValidationError.invalidContainer("an entry has an invalid filename.")
+            }
+            if name.lowercased().hasSuffix(".nca") { ncaCount += 1 }
+        }
+        guard ncaCount > 0 else { throw ImportValidationError.noNCA }
+    }
+
+    private static func readLE32(_ data: Data, _ offset: Int) -> UInt32 {
+        (0..<4).reduce(UInt32(0)) { $0 | (UInt32(data[offset + $1]) << (UInt32($1) * 8)) }
+    }
+
+    private static func readLE64(_ data: Data, _ offset: Int) -> UInt64 {
+        (0..<8).reduce(UInt64(0)) { $0 | (UInt64(data[offset + $1]) << (UInt64($1) * 8)) }
+    }
+
+    static func copyIntoAppStorage(_ source: URL, prefix: String, validationStatus: String) throws -> ImportedGameFile {
         let accessed = source.startAccessingSecurityScopedResource()
         defer { if accessed { source.stopAccessingSecurityScopedResource() } }
 
@@ -50,7 +194,7 @@ private enum ImportFileStorage {
         var mutableDestination = destination
         try? mutableDestination.setResourceValues(values)
 
-        return ImportedGameFile(displayName: source.lastPathComponent, storedName: storedName)
+        return ImportedGameFile(displayName: source.lastPathComponent, storedName: storedName, validationStatus: validationStatus)
     }
 }
 
@@ -129,13 +273,13 @@ private struct ImportScreenView: View {
                     ) {
                         fileRow(
                             title: "Base game NSP",
-                            detail: base?.displayName ?? "Not selected",
+                            detail: base.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "Not selected",
                             selected: base != nil
                         ) { picker = ImportPickerRequest(kind: .base) }
 
                         fileRow(
                             title: "prod.keys",
-                            detail: keys?.displayName ?? "Not selected",
+                            detail: keys.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "Not selected",
                             selected: keys != nil
                         ) { picker = ImportPickerRequest(kind: .keys) }
                     }
@@ -146,7 +290,7 @@ private struct ImportScreenView: View {
                     ) {
                         fileRow(
                             title: "Game update",
-                            detail: update?.displayName ?? "No update selected",
+                            detail: update.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "No update selected",
                             selected: update != nil
                         ) { picker = ImportPickerRequest(kind: .update) }
 
@@ -160,7 +304,10 @@ private struct ImportScreenView: View {
                             ForEach(dlc) { item in
                                 HStack(spacing: 8) {
                                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                                    Text(item.displayName).lineLimit(1)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(item.displayName).lineLimit(1)
+                                        Text(item.validationStatus ?? "Imported").font(.caption2).foregroundStyle(.secondary)
+                                    }
                                     Spacer(minLength: 4)
                                     Button(role: .destructive) { removeDLC(item) } label: {
                                         Image(systemName: "minus.circle")
@@ -280,7 +427,13 @@ private struct ImportScreenView: View {
         status = "Importing \(urls.count) file(s)…"
         do {
             let imported = try await Task.detached(priority: .userInitiated) {
-                try urls.map { try ImportFileStorage.copyIntoAppStorage($0, prefix: kind.prefix) }
+                // Validate every selection before copying any of them. A bad item
+                // must not partially replace a previously valid selection.
+                try urls.forEach { try ImportFileStorage.validate($0, kind: kind) }
+                let level = kind == .keys ? "Keys syntax checked" : "NSP structure checked"
+                return try urls.map {
+                    try ImportFileStorage.copyIntoAppStorage($0, prefix: kind.prefix, validationStatus: level)
+                }
             }.value
 
             switch kind {
@@ -298,7 +451,7 @@ private struct ImportScreenView: View {
                 saveDLC()
             }
             let count = imported.count
-            status = "Imported \(count) file(s) successfully."
+            status = "Validated and imported \(count) file(s). NSP content type is not yet verified."
         } catch {
             status = "Import failed: \(error.localizedDescription)"
         }
