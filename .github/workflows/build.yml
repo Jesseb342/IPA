@@ -369,13 +369,19 @@ jobs:
         if: always()
         shell: bash
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/build-diagnostics"
-          if [ -d "$RUNNER_TEMP/GameFiles" ]; then
-            find "$RUNNER_TEMP/GameFiles" -type d -name logs -exec cp -R {} "$GITHUB_WORKSPACE/build-diagnostics/" \\;
-            find "$RUNNER_TEMP/GameFiles" -type d -name '*_survey' -exec cp -R {} "$GITHUB_WORKSPACE/build-diagnostics/" \\;
-          fi
-          find "$GITHUB_WORKSPACE/build-diagnostics" -maxdepth 3 -type f -print
-
+          set -euo pipefail
+          DEST="$GITHUB_WORKSPACE/build-diagnostics"
+          mkdir -p "$DEST"
+          shopt -s nullglob
+          for dir in "$RUNNER_TEMP"/GameFiles/*_build/logs "$RUNNER_TEMP"/GameFiles/*_build/ipa/build/ios/pkg; do
+            if [ -d "$dir" ]; then
+              name="$(echo "$dir" | sed "s#^$RUNNER_TEMP/GameFiles/##; s#/#_#g")"
+              mkdir -p "$DEST/$name"
+              cp -R "$dir/." "$DEST/$name/"
+            fi
+          done
+          find "$DEST" -type f -print
+          
       - name: Upload build logs and survey/profile data
         if: always()
         uses: actions/upload-artifact@v4
