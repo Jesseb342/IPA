@@ -85,20 +85,23 @@ jobs:
         run: |
           set -euo pipefail
           APP="$DM_ROOT/build/shell/app"
-          SOURCE="$GITHUB_WORKSPACE/dm/ios/Sources/ImportScreen.swift"
-          BINARY_STRINGS="$RUNNER_TEMP/DmIOS.strings"
-          test -s "$APP/DmIOS"
-          test -s "$SOURCE"
+          test -s "$APP/DmIOS" || { echo "::error::Missing compiled app executable: $APP/DmIOS"; exit 1; }
 
-          # Verify UI copy in source and compiled symbols in the Mach-O.
-          # Save strings first: grep -q in a pipe can close early and make
-          # strings exit with SIGPIPE under this job's pipefail setting.
-          grep -Fq 'Prepare a game' "$SOURCE"
-          grep -Fq 'prod.keys' "$SOURCE"
-          strings "$APP/DmIOS" > "$BINARY_STRINGS"
-          grep -Fq 'ImportScreenView' "$BINARY_STRINGS"
-          grep -Fq '_dm_show_import_screen' "$BINARY_STRINGS"
-          echo "Import screen source, compiled view, and native bridge verified."
+          # The overlay application step already verifies the source copy.
+          # Check the actual Mach-O bytes directly to avoid brittle path/grep checks.
+          python3 - "$APP/DmIOS" <<'PY'
+          import pathlib
+          import sys
+
+          binary = pathlib.Path(sys.argv[1])
+          data = binary.read_bytes()
+          required = (b"ImportScreenView", b"_dm_show_import_screen")
+          missing = [item.decode() for item in required if item not in data]
+          if missing:
+              print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
+              raise SystemExit(1)
+          print("Import screen view and native bridge are present in the compiled app.")
+          PY
 
       - name: Verify shell contains no game payload
         shell: bash
