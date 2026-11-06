@@ -101,17 +101,22 @@ private enum ImportFileStorage {
             parsed[name.lowercased()] = value
         }
 
-        guard let headerKey = parsed["header_key"], headerKey.count == 64 else {
-            throw ImportValidationError.missingKey("header_key (32-byte hexadecimal value)")
+        // header_key is used later to decrypt NCA headers, but some otherwise
+        // usable prod.keys dumps omit it. Do not reject the whole key file at
+        // import time solely because this optional entry is absent.
+        if let headerKey = parsed["header_key"], headerKey.count != 64 {
+            throw ImportValidationError.invalidKeys("header_key must be a 32-byte (64 hex character) value when present.")
         }
+
         // Switch master_key values are 128-bit AES keys (16 bytes = 32 hex
-        // characters). header_key is 256 bits (32 bytes = 64 hex characters).
+        // characters), not 32-byte values. Match the standard prod.keys names
+        // case-insensitively; values are normalized above.
         let hasMasterKey = parsed.contains { entry in
             entry.key.range(of: #"^master_key_[0-9a-f]{2}$"#, options: .regularExpression) != nil
                 && entry.value.count == 32
         }
         guard hasMasterKey else {
-            throw ImportValidationError.missingKey("at least one 16-byte master_key_XX entry")
+            throw ImportValidationError.missingKey("at least one 16-byte master_key_XX entry (32 hexadecimal characters)")
         }
     }
 
@@ -321,7 +326,7 @@ private struct ImportScreenView: View {
 
                         fileRow(
                             title: "Add DLC",
-                            detail: dlc.isEmpty ? "No DLC selected" : "\(dlc.count) DLC file(s) imported",
+                            detail: dlc.isEmpty ? "No DLC selected" : "\(dlc.count) NSP file(s) imported · type not verified",
                             selected: !dlc.isEmpty
                         ) { picker = ImportPickerRequest(kind: .dlc) }
 
@@ -366,7 +371,7 @@ private struct ImportScreenView: View {
                         .font(.headline)
                         .foregroundStyle(base != nil && keys != nil ? .green : .primary)
 
-                        Text("The on-device extraction and IPA packaging engine is the next development step. This screen currently imports and stores your files; it does not build or launch a game yet.")
+                        Text("NSP files are checked for container structure only. The app does not yet read encrypted content metadata, so it cannot confirm whether a selected NSP is a base game, update, or DLC. The on-device extraction and IPA packaging engine is still under development.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -455,7 +460,7 @@ private struct ImportScreenView: View {
                 // Validate every selection before copying any of them. A bad item
                 // must not partially replace a previously valid selection.
                 try urls.forEach { try ImportFileStorage.validate($0, kind: kind) }
-                let level = kind == .keys ? "Keys syntax checked" : "NSP structure checked"
+                let level = kind == .keys ? "Keys syntax checked" : "NSP container checked · content type unknown"
                 return try urls.map {
                     try ImportFileStorage.copyIntoAppStorage($0, prefix: kind.prefix, validationStatus: level)
                 }
@@ -476,7 +481,7 @@ private struct ImportScreenView: View {
                 saveDLC()
             }
             let count = imported.count
-            status = "Validated and imported \(count) file(s). NSP content type is not yet verified."
+            status = "Imported \(count) file(s). NSP containers checked; base/update/DLC content type is not yet verified."
         } catch {
             status = "Import failed: \(error.localizedDescription)"
         }
