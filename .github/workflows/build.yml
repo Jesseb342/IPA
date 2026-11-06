@@ -170,6 +170,9 @@ jobs:
           s = p.read_text()
           s = s.replace("#import <AVFAudio/AVFAudio.h>", "#import <AVFAudio/AVFAudio.h>\n#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>", 1)
           s = s.replace("@interface DmRootVC : UIViewController", "@interface DmRootVC : UIViewController <UIDocumentPickerDelegate>\n@property (nonatomic, strong) UILabel *importStatus;", 1)
+          s = s.replace("UILabel *lb = [[UILabel alloc] initWithFrame:CGRectInset(self.view.bounds, 40, 40)];", "UILabel *lb = [[UILabel alloc] initWithFrame:CGRectInset(self.view.bounds, 40, 40)];\n        self.importStatus = lb;", 1)
+          s = s.replace('lb.text = [NSString stringWithFormat:@"Import failed: %@", error.localizedDescription];', 'self.importStatus.text = [NSString stringWithFormat:@"Import failed: %@", error.localizedDescription];', 1)
+          s = s.replace('lb.text = @"RomFS copied. Fully close this app, then reopen it to launch the game.";','self.importStatus.text = @"RomFS copied. Fully close this app, then reopen it to launch the game."; ', 1)
           old = 'lb.text = @"Game files not found.\\\\nPut the RomFS folder into this App\\'s Documents as \\\\"romfs\\\\" (Files app), then restart.";'
           new = 'lb.text = @"Game files are missing. Use the button below to import your extracted RomFS folder.";'
           if s.count(old) != 1:
