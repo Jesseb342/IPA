@@ -46,7 +46,9 @@ jobs:
           cp "$LIB" "$RUNNER_TEMP/LibHacAotProbe.a"
           echo "NativeAOT archive:"
           ls -lh "$RUNNER_TEMP/LibHacAotProbe.a"
-          xcrun nm -gU "$RUNNER_TEMP/LibHacAotProbe.a" | grep -E 'parabox_extract_base_romfs
+          xcrun nm -gU "$RUNNER_TEMP/LibHacAotProbe.a" | grep -E 'parabox_extract_base_romfs$'
+          xcrun nm -gU "$RUNNER_TEMP/LibHacAotProbe.a" | grep -E 'NativeAOT_StaticInitialization'
+
       - name: Install build dependencies
         shell: bash
         run: |
@@ -183,8 +185,6 @@ jobs:
 
           # Replace the old folder-only importer with the on-device NSP + prod.keys extractor.
           python ipa-tools/tools/patch_parabox_ios.py "$GITHUB_WORKSPACE"
-          PY
-
       - name: Detect game title ID and select shader profile
         shell: bash
         run: |
