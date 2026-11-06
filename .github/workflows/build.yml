@@ -1,0 +1,145 @@
+name: Parabox Lightweight IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout NxNative BC-texture fallback
+        uses: actions/checkout@v4
+        with:
+          repository: mianmuhammadse/nxnative
+          ref: d158df611bf2f3fa315c4f16585575cdfdb2a1d3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install xcodegen zstd spirv-cross
+          python -m pip install --upgrade pip
+          python -m pip install lz4 capstone fonttools backports.zstd
+
+      - name: Download Parabox base game and decode prod.keys
+        env:
+          GAME_URL: ${{ secrets.Game_URL }}
+          KEYS_BASE64: ${{ secrets.Keys_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          WORK="$RUNNER_TEMP/parabox"
+          mkdir -p "$WORK"
+
+          if [[ -z "${GAME_URL:-}" ]]; then
+            echo "::error::Game_URL secret is empty."
+            exit 1
+          fi
+          if [[ -z "${KEYS_BASE64:-}" ]]; then
+            echo "::error::Keys_URL secret is empty."
+            exit 1
+          fi
+
+          curl --fail --location --show-error --progress-bar \
+            --retry 3 --retry-delay 5 --connect-timeout 30 \
+            --output "$WORK/base.nsp.part" "$GAME_URL"
+
+          mv "$WORK/base.nsp.part" "$WORK/base.nsp"
+
+          python - "$WORK/base.nsp" "$WORK/prod.keys" <<'PY'
+          import base64, os, re, sys
+          from pathlib import Path
+
+          game = Path(sys.argv[1])
+          with game.open("rb") as f:
+              if f.read(4) != b"PFS0":
+                  raise SystemExit("Downloaded base.nsp is not a valid PFS0/NSP package.")
+
+          encoded = re.sub(r"\\s+", "", os.environ["KEYS_BASE64"].strip())
+          try:
+              keys = base64.b64decode(encoded, validate=True)
+          except Exception as exc:
+              raise SystemExit(f"Keys_URL is not valid Base64: {exc}")
+          if not keys:
+              raise SystemExit("Decoded prod.keys is empty.")
+
+          Path(sys.argv[2]).write_bytes(keys)
+          Path(sys.argv[2]).chmod(0o600)
+          print(f"Base NSP: {game.stat().st_size:,} bytes")
+          print(f"prod.keys decoded: {len(keys):,} bytes (contents not displayed)")
+          PY
+
+      - name: Configure IPA to keep RomFS external
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("dm/ios/tools/build_ipa.sh")
+          source = path.read_text()
+          old = 'MAPS+=("$P/romfs=$ROMFS")'
+          new = '''# This project intentionally leaves the game RomFS out of the IPA.
+          # The iOS importer will place it at Documents/romfs on first launch.
+          if [ "${DM_BUNDLE_ROMFS:-0}" = 1 ]; then MAPS+=("$P/romfs=$ROMFS"); fi'''
+          if source.count(old) != 1:
+              raise SystemExit("Expected RomFS packaging line was not found exactly once; refusing to patch.")
+          path.write_text(source.replace(old, new, 1))
+          print("Configured the build to omit game RomFS from the IPA.")
+          PY
+
+      - name: Build Parabox IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/parabox"
+          python scripts/build_ipa_from_nsp.py \
+            "$RUNNER_TEMP/parabox" \
+            -k "$RUNNER_TEMP/parabox/prod.keys" \
+            -o "$RUNNER_TEMP/Parabox-Lightweight.ipa"
+
+          test -s "$RUNNER_TEMP/Parabox-Lightweight.ipa"
+          ls -lh "$RUNNER_TEMP/Parabox-Lightweight.ipa"
+
+      - name: Upload IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parabox-Lightweight-IPA
+          path: ${{ runner.temp }}/Parabox-Lightweight.ipa
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload build logs and survey/profile data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Parabox-Build-Diagnostics
+          path: |
+            ${{ runner.temp }}/parabox/
+            ${{ github.workspace }}/**/logs/
+            ${{ github.workspace }}/**/*_survey/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Clean up game data and keys
+        if: always()
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/parabox"
