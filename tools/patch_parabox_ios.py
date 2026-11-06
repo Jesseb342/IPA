@@ -133,6 +133,18 @@ front.write_text(source)
 
 build_source = build.read_text()
 old_line = 'echo "OTHER_LDFLAGS = \\$(inherited) \\$(DM_FRAMEWORKS) $F" >> Gen/dm.xcconfig'
+new_line = '''if [ -n "${DM_LIBHAC_AOT_LIB:-}" ]; then
+  [ -s "$DM_LIBHAC_AOT_LIB" ] || die "NativeAOT LibHac library missing: $DM_LIBHAC_AOT_LIB"
+  [ -s "${DM_LIBHAC_AOT_LINK_INPUTS:-}" ] || die "NativeAOT linker-input manifest missing: ${DM_LIBHAC_AOT_LINK_INPUTS:-unset}"
+  echo "OTHER_LDFLAGS = \\$(inherited) \\$(DM_FRAMEWORKS) $F -force_load $DM_LIBHAC_AOT_LIB $DM_LIBHAC_AOT_LINK_FLAGS" >> Gen/dm.xcconfig
+  t "linked LibHac iOS extractor and its complete NativeAOT runtime dependencies"
+else
+  echo "OTHER_LDFLAGS = \\$(inherited) \\$(DM_FRAMEWORKS) $F" >> Gen/dm.xcconfig
+fi'''
+if build_source.count(old_line) != 1:
+    raise SystemExit("Could not find unique linker-flags insertion point in build_ipa.sh.")
+build.write_text(build_source.replace(old_line, new_line, 1))
+print("Updated NativeAOT linker integration to consume the generated .NET iOS runtime manifest.")
 new_line = old_line + '''
 if [ -n "${DM_LIBHAC_AOT_LIB:-}" ]; then
   [ -s "$DM_LIBHAC_AOT_LIB" ] || die "NativeAOT LibHac library missing: $DM_LIBHAC_AOT_LIB"
