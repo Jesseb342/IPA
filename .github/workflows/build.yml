@@ -247,7 +247,7 @@ jobs:
 
           if magic[:4] == b"PFS0":
               package = source
-          elif magic.startswith(b"Rar!") or magic.startswith(b"PK\\x03\\x04"):
+          elif magic.startswith(b"Rar!") or magic.startswith(b"PK\x03\x04"):
               subprocess.run(["unar", "-o", str(extracted), str(source)], check=True)
               packages = sorted(p for p in extracted.rglob("*")
                                 if p.is_file() and p.suffix.lower() == ".nsp")
@@ -272,7 +272,7 @@ jobs:
               for i in range(count):
                   offset = struct.unpack_from("<I", entries, i * 0x18 + 0x10)[0]
                   if offset < len(strings):
-                      end = strings.find(b"\\0", offset)
+                      end = strings.find(b"\0", offset)
                       if end >= 0:
                           names.append(strings[offset:end].decode(errors="replace"))
 
