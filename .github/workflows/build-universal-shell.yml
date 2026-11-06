@@ -57,7 +57,6 @@ jobs:
 
       - name: Build isolated LibHac NativeAOT metadata probe
         id: metadata_probe
-        continue-on-error: true
         shell: bash
         run: |
           set +e
@@ -136,6 +135,46 @@ jobs:
           test -s "$SHELL_ZIP"
           ls -lh "$SHELL_ZIP"
 
+      - name: Embed and sign LibHac metadata framework
+        shell: bash
+        env:
+          DM_ROOT: ${{ runner.temp }}/nxnative-shell
+        run: |
+          set -euo pipefail
+          PROBE_ROOT="$RUNNER_TEMP/nxn-metadata-probe"
+          APP="$DM_ROOT/build/shell/app"
+          FRAMEWORKS="$APP/Frameworks"
+          FRAMEWORK="$FRAMEWORKS/NxNativeMetadataProbe.framework"
+          test -s "$PROBE_ROOT/nxnative-metadata-probe-framework.zip" || {
+            echo "::error::The LibHac NativeAOT framework was not produced."
+            exit 1
+          }
+          mkdir -p "$FRAMEWORKS"
+          unzip -q "$PROBE_ROOT/nxnative-metadata-probe-framework.zip" -d "$RUNNER_TEMP"
+          cp -R "$RUNNER_TEMP/NxNativeMetadataProbe.framework" "$FRAMEWORK"
+          test -s "$FRAMEWORK/NxNativeMetadataProbe"
+          test -s "$FRAMEWORK/Info.plist"
+
+          # The shell builder signs the app before this framework exists.
+          # Sign the nested framework first, then re-sign the containing app.
+          codesign --force --sign - --timestamp=none "$FRAMEWORK"
+          codesign --force --sign - --timestamp=none \
+            --entitlements dm/ios/DmIOS.entitlements "$APP"
+          codesign --verify --deep --strict "$APP"
+          codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q 'increased-memory-limit'
+
+          # Rebuild the shell input archive so it includes the embedded framework.
+          cd "$DM_ROOT/build/shell"
+          rm -f nxnative-shell-build-input.zip
+          rm -rf Payload
+          mkdir Payload
+          cp -R app Payload/DmIOS.app
+          zip -qry nxnative-shell-build-input.zip Payload
+          rm -rf Payload
+          unzip -t nxnative-shell-build-input.zip >/dev/null
+          echo "Embedded and signed NxNativeMetadataProbe.framework."
+          ls -lh "$FRAMEWORK/NxNativeMetadataProbe"
+
       - name: Package shell as an IPA for sideload testing
         shell: bash
         env:
@@ -169,7 +208,7 @@ jobs:
 
           binary = pathlib.Path(sys.argv[1])
           data = binary.read_bytes()
-          required = (b"ImportScreenView", b"_dm_show_import_screen")
+          required = (b"ImportScreenView", b"_dm_show_import_screen", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp")
           missing = [item.decode() for item in required if item not in data]
           if missing:
               print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
@@ -189,7 +228,7 @@ jobs:
           grep -q '^KIND=ios$' "$APP/dm/shell_info.txt"
           grep -q '^GUEST=1$' "$APP/dm/shell_info.txt"
           grep -q '^ENV=1$' "$APP/dm/shell_info.txt"
-          for item in romfs msl aoc Frameworks; do
+          for item in romfs msl aoc; do
             if [ -e "$APP/$item" ]; then
               echo "::error::Game-specific payload unexpectedly present: $item"
               exit 1
@@ -199,6 +238,15 @@ jobs:
             echo "::error::A game package or key file was found in the shell."
             exit 1
           fi
+          test -s "$APP/Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe" || {
+            echo "::error::The LibHac metadata framework is missing from the app."
+            exit 1
+          }
+          if find "$APP/Frameworks" -mindepth 1 -maxdepth 1 ! -name 'NxNativeMetadataProbe.framework' | grep -q .; then
+            echo "::error::Unexpected framework or game module found in the shell."
+            exit 1
+          fi
+          codesign --verify --deep --strict "$APP"
           echo "Shell metadata:"
           cat "$APP/dm/shell_info.txt"
           echo "Shell file count: $(find "$APP" -type f | wc -l | tr -d ' ')"
