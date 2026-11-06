@@ -94,7 +94,7 @@ private enum ImportKind: String, Identifiable, Sendable {
         }
     }
     var extensions: [String] { self == .keys ? ["keys"] : ["nsp"] }
-    var allowsMultiple: Bool { self == .dlc }
+    var allowsMultiple: Bool { false }
 }
 
 private struct ImportedGameFile: Codable, Identifiable, Equatable, Sendable {
@@ -382,8 +382,19 @@ private struct ImportScreenView: View {
     @State private var picker: ImportPickerRequest?
     @State private var importing = false
     @State private var status = ""
+    @State private var noUpdateSelected = false
+    @State private var dlcSelectionFinished = false
 
     private let defaults = UserDefaults.standard
+
+    private var baseVerified: Bool {
+        base?.validationStatus?.hasPrefix("Verified base game") == true
+    }
+    private var updateVerified: Bool {
+        update?.validationStatus?.hasPrefix("Verified update") == true
+    }
+    private var canChooseUpdate: Bool { baseVerified }
+    private var canChooseDLC: Bool { updateVerified || noUpdateSelected }
 
     var body: some View {
         NavigationStack {
@@ -397,55 +408,98 @@ private struct ImportScreenView: View {
                     }
 
                     fileSection(
-                        title: "Required files",
-                        subtitle: "Both are needed before game preparation can begin."
+                        title: "Step 1 · prod.keys",
+                        subtitle: "Start here. No game files can be selected until this file is imported."
                     ) {
                         fileRow(
-                            title: "Base game NSP",
-                            detail: base.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "Not selected",
-                            selected: base != nil
-                        ) { picker = ImportPickerRequest(kind: .base) }
-
-                        fileRow(
-                            title: "prod.keys",
-                            detail: keys.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "Not selected",
+                            title: "Select prod.keys",
+                            detail: keys.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "Required · not selected",
                             selected: keys != nil
                         ) { picker = ImportPickerRequest(kind: .keys) }
                     }
 
-                    fileSection(
-                        title: "Optional content",
-                        subtitle: "Optional content is checked against encrypted CNMT metadata when prod.keys is available."
-                    ) {
-                        fileRow(
-                            title: "Game update",
-                            detail: update.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "No update selected",
-                            selected: update != nil
-                        ) { picker = ImportPickerRequest(kind: .update) }
-
-                        fileRow(
-                            title: "Add DLC",
-                            detail: dlc.isEmpty ? "No DLC selected" : "\(dlc.count) NSP file(s) imported",
-                            selected: !dlc.isEmpty
-                        ) { picker = ImportPickerRequest(kind: .dlc) }
-
-                        if !dlc.isEmpty {
-                            ForEach(dlc) { item in
-                                HStack(spacing: 8) {
-                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.displayName).lineLimit(1)
-                                        Text(item.validationStatus ?? "Imported").font(.caption2).foregroundStyle(.secondary)
-                                    }
-                                    Spacer(minLength: 4)
-                                    Button(role: .destructive) { removeDLC(item) } label: {
-                                        Image(systemName: "minus.circle")
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                .font(.footnote)
-                            }
+                    if keys != nil {
+                        fileSection(
+                            title: "Step 2 · Base game",
+                            subtitle: "Unlocked after prod.keys is imported. The app must identify this as an actual base game."
+                        ) {
+                            fileRow(
+                                title: baseVerified ? "Replace base game NSP" : "Select base game NSP",
+                                detail: base.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "Required · not selected",
+                                selected: baseVerified
+                            ) { picker = ImportPickerRequest(kind: .base) }
                         }
+                    }
+
+                    if canChooseUpdate && !noUpdateSelected {
+                        fileSection(
+                            title: "Step 3 · Game update",
+                            subtitle: "Select one update NSP, or explicitly continue without an update."
+                        ) {
+                            fileRow(
+                                title: updateVerified ? "Replace update NSP" : "Select update NSP",
+                                detail: update.map { "\($0.displayName) · \($0.validationStatus ?? "Imported")" } ?? "Optional · not selected",
+                                selected: updateVerified
+                            ) { picker = ImportPickerRequest(kind: .update) }
+                            Button {
+                                skipUpdate()
+                            } label: {
+                                Label("No update", systemImage: "forward.end")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 12)
+                            }
+                            .disabled(importing)
+                        }
+                    } else if updateVerified || noUpdateSelected {
+                        completedStep(
+                            title: "Step 3 · Game update",
+                            detail: updateVerified ? (update?.displayName ?? "Update verified") : "Skipped · no update"
+                        )
+                    }
+
+                    if canChooseDLC && !dlcSelectionFinished {
+                        fileSection(
+                            title: "Step 4 · DLC",
+                            subtitle: "Add DLC packages one at a time. You can finish without adding any."
+                        ) {
+                            fileRow(
+                                title: "Add one DLC NSP",
+                                detail: dlc.isEmpty ? "Optional · no DLC selected" : "\(dlc.count) DLC file(s) verified · add another",
+                                selected: !dlc.isEmpty
+                            ) { picker = ImportPickerRequest(kind: .dlc) }
+
+                            if !dlc.isEmpty {
+                                ForEach(dlc) { item in
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(item.displayName).lineLimit(1)
+                                            Text(item.validationStatus ?? "Imported").font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                        Spacer(minLength: 4)
+                                        Button(role: .destructive) { removeDLC(item) } label: {
+                                            Image(systemName: "minus.circle")
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    .font(.footnote)
+                                }
+                            }
+
+                            Button {
+                                finishDLCSelection()
+                            } label: {
+                                Label(dlc.isEmpty ? "No DLC" : "Done adding DLC", systemImage: "checkmark")
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 12)
+                            }
+                            .disabled(importing)
+                        }
+                    } else if dlcSelectionFinished {
+                        completedStep(
+                            title: "Step 4 · DLC",
+                            detail: dlc.isEmpty ? "Skipped · no DLC" : "\(dlc.count) DLC file(s) selected"
+                        )
                     }
 
                     if importing {
@@ -549,9 +603,45 @@ private struct ImportScreenView: View {
         .disabled(importing)
     }
 
+    private func completedStep(title: String, detail: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title2)
+                .foregroundStyle(.green)
+                .frame(width: 30)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline)
+                Text(detail).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer()
+            Text("Complete").font(.caption.bold()).foregroundStyle(.green)
+        }
+        .padding(14)
+        .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func skipUpdate() {
+        if let update { deleteStoredFile(update) }
+        update = nil
+        defaults.removeObject(forKey: "nxn.import.update")
+        noUpdateSelected = true
+        defaults.set(true, forKey: "nxn.import.noUpdate")
+        status = "Continuing without a game update."
+    }
+
+    private func finishDLCSelection() {
+        dlcSelectionFinished = true
+        defaults.set(true, forKey: "nxn.import.dlcFinished")
+        status = dlc.isEmpty ? "Continuing without DLC." : "DLC selection complete."
+    }
+
     @MainActor
     private func importFiles(_ urls: [URL], kind: ImportKind) async {
         guard !urls.isEmpty else { return }
+        guard urls.count == 1 else {
+            status = "Import failed: Select exactly one file at a time."
+            return
+        }
         if kind != .keys && keys == nil {
             status = "Import failed: Import and verify prod.keys before selecting any NSP. No NSP was copied."
             return
@@ -589,9 +679,13 @@ private struct ImportScreenView: View {
             case .update:
                 if let previous = update { deleteStoredFile(previous) }
                 update = imported.first
+                noUpdateSelected = false
+                defaults.set(false, forKey: "nxn.import.noUpdate")
                 defaults.set(update.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.update")
             case .dlc:
                 dlc.append(contentsOf: imported)
+                dlcSelectionFinished = false
+                defaults.set(false, forKey: "nxn.import.dlcFinished")
                 saveDLC()
             }
             let count = imported.count
@@ -635,6 +729,8 @@ private struct ImportScreenView: View {
             }
             saveDLC()
         }
+        noUpdateSelected = defaults.bool(forKey: "nxn.import.noUpdate")
+        dlcSelectionFinished = defaults.bool(forKey: "nxn.import.dlcFinished")
         if keys != nil { Task { await verifySavedContent() } }
     }
 
@@ -699,7 +795,9 @@ private struct ImportScreenView: View {
         [base, keys, update].compactMap { $0 }.forEach(deleteStoredFile)
         dlc.forEach(deleteStoredFile)
         base = nil; keys = nil; update = nil; dlc = []
-        ["nxn.import.base", "nxn.import.keys", "nxn.import.update", "nxn.import.dlc"].forEach(defaults.removeObject(forKey:))
+        ["nxn.import.base", "nxn.import.keys", "nxn.import.update", "nxn.import.dlc", "nxn.import.noUpdate", "nxn.import.dlcFinished"].forEach(defaults.removeObject(forKey:))
+        noUpdateSelected = false
+        dlcSelectionFinished = false
         status = "Imported file selections cleared."
     }
 
