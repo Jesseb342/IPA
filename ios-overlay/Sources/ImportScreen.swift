@@ -121,6 +121,12 @@ private enum GameExtractor {
 
     private static var arm64AnalyzeFunction: Arm64AnalyzeFunction?
 
+    typealias Arm64DiscoverStubsFunction = @convention(c) (
+        UnsafeRawPointer, Int, UnsafeMutablePointer<CChar>, Int
+    ) -> Int32
+
+    private static var arm64DiscoverStubsFunction: Arm64DiscoverStubsFunction?
+
     typealias Arm64InspectFunction = @convention(c) (
         UnsafeRawPointer, Int, UInt64, UnsafeMutablePointer<CChar>, Int
     ) -> Int32
@@ -243,6 +249,47 @@ private enum GameExtractor {
         let response = output.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
         guard result == 0 else {
             throw ImportValidationError.metadata(response.isEmpty ? "Full-text analysis returned code \(result)." : response)
+        }
+        if response.hasPrefix("error|") {
+            throw ImportValidationError.metadata(String(response.dropFirst(6)))
+        }
+        return response
+    }
+
+    static func discoverLinkerStubs(url: URL) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if arm64DiscoverStubsFunction == nil {
+            let binary = Bundle.main.bundleURL
+                .appendingPathComponent("Frameworks/NxNativeArm64.framework/NxNativeArm64")
+            guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                throw ImportValidationError.metadata("Could not load Capstone linker-stub scanner: \(detail)")
+            }
+            arm64FrameworkHandle = loaded
+            guard let symbol = dlsym(loaded, "nxn_arm64_discover_linker_stubs") else {
+                throw ImportValidationError.metadata("Capstone's linker-stub discovery function is missing.")
+            }
+            arm64DiscoverStubsFunction = unsafeBitCast(symbol, to: Arm64DiscoverStubsFunction.self)
+        }
+
+        guard let discover = arm64DiscoverStubsFunction else {
+            throw ImportValidationError.metadata("Linker-stub discovery could not be initialized.")
+        }
+        let data: Data
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
+        catch { throw ImportValidationError.metadata("Could not read rewritten NSO: \(error.localizedDescription)") }
+        var output = [CChar](repeating: 0, count: 1024 * 1024)
+        let result = data.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return Int32(-1) }
+            return output.withUnsafeMutableBufferPointer { buffer in
+                discover(base, raw.count, buffer.baseAddress!, buffer.count)
+            }
+        }
+        let response = output.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        guard result == 0 else {
+            throw ImportValidationError.metadata(response.isEmpty ? "Linker-stub discovery returned code \(result)." : response)
         }
         if response.hasPrefix("error|") {
             throw ImportValidationError.metadata(String(response.dropFirst(6)))
