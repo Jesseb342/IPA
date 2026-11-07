@@ -179,7 +179,7 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
                                                uint64_t function_offset,
                                                char *output, size_t output_capacity) {
     if (!file || !output || output_capacity < 512) return -1;
-    output[0] = '\\0';
+    output[0] = '\0';
     if (file_size < 0x100 || memcmp(file, "NSO0", 4) != 0)
         return snprintf(output, output_capacity, "error|Input is not a complete NSO file.") < (int)output_capacity ? 0 : -2;
     uint32_t flags = read_le32(file + 0x0c);
@@ -224,7 +224,7 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
     region_count = cs_disasm(handle, file + text_offset + function_offset,
                              scan_length, function_offset, 0, &region);
     if (append_text(output, output_capacity, &used,
-                    "function|offset=%08llx|estimated_end=%08llx|bytes=%llu\\n",
+                    "function|offset=%08llx|estimated_end=%08llx|bytes=%llu\n",
                     (unsigned long long)function_offset, (unsigned long long)end,
                     (unsigned long long)(end - function_offset)) != 0) {
         if (region) cs_free(region, region_count);
@@ -232,7 +232,7 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
     }
     for (size_t i = 0; i < region_count; i++) {
         cs_insn *insn = &region[i];
-        if (append_text(output, output_capacity, &used, "insn|%08llx|%s|%s\\n",
+        if (append_text(output, output_capacity, &used, "insn|%08llx|%s|%s\n",
                         (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
             cs_free(region, region_count); cs_close(&handle); return -2;
         }
@@ -251,7 +251,7 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
             if (strcmp(insn->mnemonic, "bl") == 0) {
                 const char *hash = strchr(insn->op_str, '#');
                 if (hash && strtoull(hash + 1, NULL, 0) == function_offset && callers < 64) {
-                    if (append_text(output, output_capacity, &used, "caller|%08llx\\n",
+                    if (append_text(output, output_capacity, &used, "caller|%08llx\n",
                                     (unsigned long long)insn->address) != 0) {
                         cs_free(items, count); cs_close(&handle); return -2;
                     }
@@ -262,7 +262,7 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
         cs_free(items, count);
     }
     if (append_text(output, output_capacity, &used,
-                    "summary|caller_sites_listed=%u|caller_limit=64|boundary=next-prologue-or-0x600-byte-window\\n",
+                    "summary|caller_sites_listed=%u|caller_limit=64|boundary=next-prologue-or-0x600-byte-window\n",
                     callers) != 0) {
         cs_close(&handle); return -2;
     }
