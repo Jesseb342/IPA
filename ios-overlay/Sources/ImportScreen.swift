@@ -171,7 +171,7 @@ private enum GameExtractor {
                 .appendingPathComponent("Frameworks/NxNativeArm64.framework/NxNativeArm64")
             guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
                 let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
-                throw ImportValidationError.metadata("Could not load Capstone function inspector: \\(detail)")
+                throw ImportValidationError.metadata("Could not load Capstone function inspector: \(detail)")
             }
             arm64FrameworkHandle = loaded
             guard let symbol = dlsym(loaded, "nxn_arm64_inspect_function") else {
@@ -185,7 +185,7 @@ private enum GameExtractor {
         }
         let data: Data
         do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
-        catch { throw ImportValidationError.metadata("Could not read rewritten NSO: \\(error.localizedDescription)") }
+        catch { throw ImportValidationError.metadata("Could not read rewritten NSO: \(error.localizedDescription)") }
         var output = [CChar](repeating: 0, count: 256 * 1024)
         let result = data.withUnsafeBytes { raw in
             guard let base = raw.baseAddress else { return Int32(-1) }
@@ -195,7 +195,7 @@ private enum GameExtractor {
         }
         let response = output.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
         guard result == 0 else {
-            throw ImportValidationError.metadata(response.isEmpty ? "Function inspection returned code \\(result)." : response)
+            throw ImportValidationError.metadata(response.isEmpty ? "Function inspection returned code \(result)." : response)
         }
         if response.hasPrefix("error|") {
             throw ImportValidationError.metadata(String(response.dropFirst(6)))
@@ -298,7 +298,7 @@ private enum GameExtractor {
                     .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
                 guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
                     let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
-                    throw ImportValidationError.metadata("Could not load the NSO rewrite engine: \\(detail)")
+                    throw ImportValidationError.metadata("Could not load the NSO rewrite engine: \(detail)")
                 }
                 frameworkHandle = loaded
                 handle = loaded
@@ -1469,7 +1469,7 @@ private struct ImportScreenView: View {
                 try GameExtractor.inspectFunction(url: mainModule, textOffset: offset)
             }.value
         } catch {
-            disassemblyLog = "Function inspection failed: \\(error.localizedDescription)"
+            disassemblyLog = "Function inspection failed: \(error.localizedDescription)"
         }
     }
 
