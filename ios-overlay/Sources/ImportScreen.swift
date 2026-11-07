@@ -105,6 +105,98 @@ private enum GameExtractor {
 
     private static var rewriteNsoFunction: RewriteNsoFunction?
 
+    typealias EncoderSelfTestFunction = @convention(c) (
+        UnsafeMutablePointer<CChar>, Int32
+    ) -> Int32
+
+    private static var encoderSelfTestFunction: EncoderSelfTestFunction?
+
+    typealias Arm64DisassembleFunction = @convention(c) (
+        UnsafeRawPointer, Int, UInt32, UnsafeMutablePointer<CChar>, Int
+    ) -> Int32
+
+    private static var arm64FrameworkHandle: UnsafeMutableRawPointer?
+    private static var arm64DisassembleFunction: Arm64DisassembleFunction?
+
+    static func testArm64Encoder() throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if encoderSelfTestFunction == nil {
+            let handle: UnsafeMutableRawPointer
+            if let existing = frameworkHandle {
+                handle = existing
+            } else {
+                let binary = Bundle.main.bundleURL
+                    .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
+                guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                    let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                    throw ImportValidationError.metadata("Could not load the AArch64 encoder: \(detail)")
+                }
+                frameworkHandle = loaded
+                handle = loaded
+            }
+            guard let symbol = dlsym(handle, "nxn_arm64_encoder_selftest") else {
+                throw ImportValidationError.metadata("The AArch64 encoder self-test is missing.")
+            }
+            encoderSelfTestFunction = unsafeBitCast(symbol, to: EncoderSelfTestFunction.self)
+        }
+
+        guard let test = encoderSelfTestFunction else {
+            throw ImportValidationError.metadata("The AArch64 encoder self-test could not be initialized.")
+        }
+        var output = [CChar](repeating: 0, count: 16 * 1024)
+        let result = output.withUnsafeMutableBufferPointer { buffer in
+            test(buffer.baseAddress!, Int32(buffer.count))
+        }
+        let response = output.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        guard result == 0 else {
+            throw ImportValidationError.metadata(response.isEmpty ? "AArch64 encoder vectors failed (code \(result))." : response)
+        }
+        return response
+    }
+
+    static func disassembleNSO(url: URL) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if arm64DisassembleFunction == nil {
+            let binary = Bundle.main.bundleURL
+                .appendingPathComponent("Frameworks/NxNativeArm64.framework/NxNativeArm64")
+            guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                throw ImportValidationError.metadata("Could not load Capstone ARM64: \(detail)")
+            }
+            arm64FrameworkHandle = loaded
+            guard let symbol = dlsym(loaded, "nxn_arm64_disassemble_nso") else {
+                throw ImportValidationError.metadata("Capstone's NSO disassembly entry point is missing.")
+            }
+            arm64DisassembleFunction = unsafeBitCast(symbol, to: Arm64DisassembleFunction.self)
+        }
+
+        guard let disassemble = arm64DisassembleFunction else {
+            throw ImportValidationError.metadata("Capstone ARM64 could not be initialized.")
+        }
+        let data: Data
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
+        catch { throw ImportValidationError.metadata("Could not read rewritten NSO: \(error.localizedDescription)") }
+        var output = [CChar](repeating: 0, count: 256 * 1024)
+        let result = data.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return Int32(-1) }
+            return output.withUnsafeMutableBufferPointer { buffer in
+                disassemble(base, raw.count, 96, buffer.baseAddress!, buffer.count)
+            }
+        }
+        let response = output.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        guard result == 0 else {
+            throw ImportValidationError.metadata(response.isEmpty ? "Capstone returned code \(result)." : response)
+        }
+        if response.hasPrefix("error|") {
+            throw ImportValidationError.metadata(String(response.dropFirst(6)))
+        }
+        return response
+    }
+
     static func rewriteNSOModules(exefsURL: URL, outputURL: URL) throws -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -662,6 +754,10 @@ private struct ImportScreenView: View {
     @State private var inspectionLog = ""
     @State private var rewritingModules = false
     @State private var rewriteLog = ""
+    @State private var testingEncoder = false
+    @State private var encoderTestLog = ""
+    @State private var disassemblingModules = false
+    @State private var disassemblyLog = ""
     @State private var extractionLog = ""
     @State private var status = ""
     @State private var noUpdateSelected = false
@@ -847,6 +943,47 @@ private struct ImportScreenView: View {
                     }
                     if !rewriteLog.isEmpty {
                         Text(rewriteLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    if gameExtracted {
+                        Button {
+                            Task { await runArm64EncoderTests() }
+                        } label: {
+                            Label("Test AArch64 encoders", systemImage: "function")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(testingEncoder || disassemblingModules || rewritingModules)
+
+                        Button {
+                            Task { await disassembleMainModule() }
+                        } label: {
+                            Label("Disassemble rewritten main NSO", systemImage: "text.alignleft")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(testingEncoder || disassemblingModules || rewritingModules)
+                    }
+                    if testingEncoder || disassemblingModules {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text(testingEncoder ? "Checking AArch64 instruction encoders…" : "Disassembling main NSO with Capstone…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if !encoderTestLog.isEmpty {
+                        Text(encoderTestLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+                    if !disassemblyLog.isEmpty {
+                        Text(disassemblyLog)
                             .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
@@ -1158,6 +1295,38 @@ private struct ImportScreenView: View {
             rewriteLog = report + "\nOutput: Documents/PreparedGame/RewrittenExeFS\nOriginal ExeFS was left unchanged. No game-specific patches were applied in this test."
         } catch {
             rewriteLog = "Rewrite failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func runArm64EncoderTests() async {
+        testingEncoder = true
+        encoderTestLog = ""
+        defer { testingEncoder = false }
+        do {
+            encoderTestLog = try await Task.detached(priority: .userInitiated) {
+                try GameExtractor.testArm64Encoder()
+            }.value
+        } catch {
+            encoderTestLog = "Encoder self-test failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func disassembleMainModule() async {
+        disassemblingModules = true
+        disassemblyLog = ""
+        defer { disassemblingModules = false }
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let mainModule = documents.appendingPathComponent("PreparedGame/RewrittenExeFS/main")
+        guard FileManager.default.fileExists(atPath: mainModule.path) else {
+            disassemblyLog = "Rewritten main NSO not found. Tap Rewrite NSO modules first."
+            return
+        }
+        do {
+            disassemblyLog = try await Task.detached(priority: .userInitiated) {
+                try GameExtractor.disassembleNSO(url: mainModule)
+            }.value
+        } catch {
+            disassemblyLog = "Disassembly failed: \(error.localizedDescription)"
         }
     }
 
