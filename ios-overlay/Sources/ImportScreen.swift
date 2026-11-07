@@ -433,7 +433,7 @@ private enum ImportFileStorage {
               base <= UInt64.max - 0x1000,
               (base >> 16) == (dlc >> 16),
               dlc >= base + 0x1000 else {
-            throw ImportValidationError.metadata("DLC title ID (titleID) does not belong to base game (baseTitleID).")
+            throw ImportValidationError.metadata("DLC title ID \(titleID) does not belong to base game \(baseTitleID).")
         }
         return dlc - base - 0x1000
     }
