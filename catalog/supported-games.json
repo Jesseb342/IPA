@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-07T13:14:13Z",
+  "generatedAt": "2026-11-07T21:57:29Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "72a9cde9401d4745051fd042280a081bb4f69df7",
+    "commit": "67139f17160f611b0b263b01fb69e650ddae0c72",
     "profilesPath": "dm/games"
   },
-  "count": 149,
+  "count": 152,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -523,6 +523,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100346017304000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100346017304000/README.md"
+    },
+    {
+      "titleId": "010035F022078000",
+      "name": "DRAGON BALL: Sparking! ZERO",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010035F022078000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010035F022078000/README.md"
     },
     {
       "titleId": "010036E00FB20000",
@@ -1511,6 +1528,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008F6008C5E000/README.md"
     },
     {
+      "titleId": "01008F701C074000",
+      "name": "Sonic Superstars",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008F701C074000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008F701C074000/README.md"
+    },
+    {
       "titleId": "010092B0091D0000",
       "name": "Team Sonic Racing",
       "profileStatus": "profile_available",
@@ -1747,6 +1781,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100A6301214E000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100A6301214E000/README.md"
+    },
+    {
+      "titleId": "0100A7C01B792000",
+      "name": "Minecraft Dungeons II",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100A7C01B792000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100A7C01B792000/README.md"
     },
     {
       "titleId": "0100A83022A22000",
