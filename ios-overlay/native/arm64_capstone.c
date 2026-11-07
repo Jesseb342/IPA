@@ -170,3 +170,102 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
     cs_close(&handle);
     return result == 0 ? 0 : -2;
 }
+
+
+// Inspect a selected function by NSO-text-relative offset. The end is estimated
+// from the next common frame-pointer prologue within a bounded search window.
+// Callers are discovered by scanning direct BL targets across the full text.
+NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_size,
+                                               uint64_t function_offset,
+                                               char *output, size_t output_capacity) {
+    if (!file || !output || output_capacity < 512) return -1;
+    output[0] = '\\0';
+    if (file_size < 0x100 || memcmp(file, "NSO0", 4) != 0)
+        return snprintf(output, output_capacity, "error|Input is not a complete NSO file.") < (int)output_capacity ? 0 : -2;
+    uint32_t flags = read_le32(file + 0x0c);
+    uint32_t text_offset = read_le32(file + 0x10);
+    uint32_t text_size = read_le32(file + 0x18);
+    if ((flags & 0x81u) != 0)
+        return snprintf(output, output_capacity, "error|Main text segment is still compressed; rewrite the NSO first.") < (int)output_capacity ? 0 : -2;
+    if (text_size == 0 || text_offset < 0x100 || (uint64_t)text_offset + text_size > file_size)
+        return snprintf(output, output_capacity, "error|NSO text segment bounds are invalid.") < (int)output_capacity ? 0 : -2;
+    if (function_offset >= text_size || (function_offset & 3u) != 0)
+        return snprintf(output, output_capacity, "error|Offset must be a 4-byte-aligned position inside the NSO text segment.") < (int)output_capacity ? 0 : -2;
+
+    csh handle;
+    cs_err err = cs_open(CS_ARCH_ARM64, CS_MODE_ARM, &handle);
+    if (err != CS_ERR_OK)
+        return snprintf(output, output_capacity, "error|Capstone initialization failed: %s", cs_strerror(err)) < (int)output_capacity ? 0 : -2;
+    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
+    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
+
+    size_t used = 0;
+    uint64_t end = function_offset + 0x600;
+    if (end > text_size) end = text_size;
+    size_t scan_length = (size_t)(end - function_offset);
+    cs_insn *region = NULL;
+    size_t region_count = cs_disasm(handle, file + text_offset + function_offset,
+                                    scan_length, function_offset, 0, &region);
+    if (region_count == 0) {
+        cs_close(&handle);
+        return snprintf(output, output_capacity, "error|Capstone could not decode at the selected offset.") < (int)output_capacity ? 0 : -2;
+    }
+    for (size_t i = 4; i < region_count; i++) {
+        cs_insn *insn = &region[i];
+        if (strcmp(insn->mnemonic, "stp") == 0 &&
+            strstr(insn->op_str, "x29, x30, [sp") != NULL) {
+            end = insn->address;
+            break;
+        }
+    }
+    cs_free(region, region_count);
+    scan_length = (size_t)(end - function_offset);
+    region = NULL;
+    region_count = cs_disasm(handle, file + text_offset + function_offset,
+                             scan_length, function_offset, 0, &region);
+    if (append_text(output, output_capacity, &used,
+                    "function|offset=%08llx|estimated_end=%08llx|bytes=%llu\\n",
+                    (unsigned long long)function_offset, (unsigned long long)end,
+                    (unsigned long long)(end - function_offset)) != 0) {
+        if (region) cs_free(region, region_count);
+        cs_close(&handle); return -2;
+    }
+    for (size_t i = 0; i < region_count; i++) {
+        cs_insn *insn = &region[i];
+        if (append_text(output, output_capacity, &used, "insn|%08llx|%s|%s\\n",
+                        (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
+            cs_free(region, region_count); cs_close(&handle); return -2;
+        }
+    }
+    cs_free(region, region_count);
+
+    uint32_t callers = 0;
+    const size_t chunk_size = 0x10000;
+    for (size_t base = 0; base < text_size; base += chunk_size) {
+        size_t length = text_size - base;
+        if (length > chunk_size) length = chunk_size;
+        cs_insn *items = NULL;
+        size_t count = cs_disasm(handle, file + text_offset + base, length, (uint64_t)base, 0, &items);
+        for (size_t i = 0; i < count; i++) {
+            cs_insn *insn = &items[i];
+            if (strcmp(insn->mnemonic, "bl") == 0) {
+                const char *hash = strchr(insn->op_str, '#');
+                if (hash && strtoull(hash + 1, NULL, 0) == function_offset && callers < 64) {
+                    if (append_text(output, output_capacity, &used, "caller|%08llx\\n",
+                                    (unsigned long long)insn->address) != 0) {
+                        cs_free(items, count); cs_close(&handle); return -2;
+                    }
+                    callers++;
+                }
+            }
+        }
+        cs_free(items, count);
+    }
+    if (append_text(output, output_capacity, &used,
+                    "summary|caller_sites_listed=%u|caller_limit=64|boundary=next-prologue-or-0x600-byte-window\\n",
+                    callers) != 0) {
+        cs_close(&handle); return -2;
+    }
+    cs_close(&handle);
+    return 0;
+}
