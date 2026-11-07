@@ -234,6 +234,7 @@ jobs:
           cp -R "$RUNNER_TEMP/NxNativeArm64.framework" "$ARM64_FRAMEWORK"
           test -s "$ARM64_FRAMEWORK/NxNativeArm64"
           nm -gU "$ARM64_FRAMEWORK/NxNativeArm64" | grep -q '_nxn_arm64_disassemble_nso'
+          nm -gU "$ARM64_FRAMEWORK/NxNativeArm64" | grep -q '_nxn_arm64_analyze_nso'
 
           # Sign both nested frameworks before re-signing the containing app.
           codesign --force --sign - --timestamp=none "$ARM64_FRAMEWORK"
@@ -288,7 +289,7 @@ jobs:
 
           binary = pathlib.Path(sys.argv[1])
           data = binary.read_bytes()
-          required = (b"ImportScreenView", b"_dm_show_import_screen", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso")
+          required = (b"ImportScreenView", b"_dm_show_import_screen", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso")
           missing = [item.decode() for item in required if item not in data]
           if missing:
               print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
