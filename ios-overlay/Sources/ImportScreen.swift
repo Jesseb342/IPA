@@ -1121,6 +1121,16 @@ private struct ImportScreenView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(testingEncoder || disassemblingModules || rewritingModules)
 
+                        Button {
+                            Task { await discoverMainLinkerStubs() }
+                        } label: {
+                            Label("Discover linker stubs", systemImage: "point.3.connected.trianglepath.dotted")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(testingEncoder || disassemblingModules || rewritingModules)
+
                         HStack(spacing: 8) {
                             Text("Text offset")
                                 .font(.caption)
@@ -1498,6 +1508,25 @@ private struct ImportScreenView: View {
             }.value
         } catch {
             disassemblyLog = "Full NSO analysis failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func discoverMainLinkerStubs() async {
+        disassemblingModules = true
+        disassemblyLog = ""
+        defer { disassemblingModules = false }
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let mainModule = documents.appendingPathComponent("PreparedGame/RewrittenExeFS/main")
+        guard FileManager.default.fileExists(atPath: mainModule.path) else {
+            disassemblyLog = "Rewritten main NSO not found. Tap Rewrite NSO modules first."
+            return
+        }
+        do {
+            disassemblyLog = try await Task.detached(priority: .userInitiated) {
+                try GameExtractor.discoverLinkerStubs(url: mainModule)
+            }.value
+        } catch {
+            disassemblyLog = "Linker-stub discovery failed: \(error.localizedDescription)"
         }
     }
 
