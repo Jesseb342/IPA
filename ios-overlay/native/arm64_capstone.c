@@ -172,9 +172,57 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
 }
 
 
-// Inspect a selected function by NSO-text-relative offset. The end is estimated
-// from the next common frame-pointer prologue within a bounded search window.
-// Callers are discovered by scanning direct BL targets across the full text.
+// Parse the immediate operand printed by Capstone (for example "#0x1234").
+static int parse_hash_immediate(const char *text, uint64_t *value) {
+    if (!text || !value) return 0;
+    const char *hash = strchr(text, '#');
+    if (!hash) return 0;
+    char *end = NULL;
+    unsigned long long parsed = strtoull(hash + 1, &end, 0);
+    if (end == hash + 1) return 0;
+    *value = (uint64_t)parsed;
+    return 1;
+}
+
+static int find_instruction_at(const cs_insn *items, size_t count, uint64_t address) {
+    for (size_t i = 0; i < count; i++)
+        if (items[i].address == address) return (int)i;
+    return -1;
+}
+
+static int is_conditional_branch(const char *mnemonic) {
+    return (strncmp(mnemonic, "b.", 2) == 0 ||
+            strcmp(mnemonic, "cbz") == 0 || strcmp(mnemonic, "cbnz") == 0 ||
+            strcmp(mnemonic, "tbz") == 0 || strcmp(mnemonic, "tbnz") == 0);
+}
+
+static int is_direct_branch(const char *mnemonic) {
+    return strcmp(mnemonic, "b") == 0 || is_conditional_branch(mnemonic);
+}
+
+static int map_nso_va_to_file(const uint8_t *file, size_t file_size,
+                              uint64_t address, size_t required,
+                              size_t *file_offset) {
+    // NSO segment triples begin at 0x10: file offset, memory offset, size.
+    for (size_t segment = 0; segment < 3; segment++) {
+        size_t header = 0x10 + segment * 0x10;
+        uint32_t segment_file = read_le32(file + header);
+        uint32_t segment_mem = read_le32(file + header + 4);
+        uint32_t segment_size = read_le32(file + header + 8);
+        if (address < segment_mem) continue;
+        uint64_t delta = address - segment_mem;
+        if (delta > segment_size || required > (uint64_t)segment_size - delta) continue;
+        uint64_t absolute = (uint64_t)segment_file + delta;
+        if (absolute > file_size || required > file_size - absolute) continue;
+        *file_offset = (size_t)absolute;
+        return 1;
+    }
+    return 0;
+}
+
+// Inspect a selected NSO text-relative address. A bounded control-flow walk
+// estimates the reachable function body; direct calls, tail branches, and
+// linker-style indirect jump stubs are reported separately. Read-only.
 NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_size,
                                                uint64_t function_offset,
                                                char *output, size_t output_capacity) {
@@ -200,48 +248,156 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
     cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
 
     size_t used = 0;
-    uint64_t end = function_offset + 0x600;
-    if (end > text_size) end = text_size;
-    size_t scan_length = (size_t)(end - function_offset);
+    uint64_t window_end = function_offset + 0x600;
+    if (window_end > text_size) window_end = text_size;
+    size_t window_length = (size_t)(window_end - function_offset);
     cs_insn *region = NULL;
     size_t region_count = cs_disasm(handle, file + text_offset + function_offset,
-                                    scan_length, function_offset, 0, &region);
+                                    window_length, function_offset, 0, &region);
     if (region_count == 0) {
         cs_close(&handle);
         return snprintf(output, output_capacity, "error|Capstone could not decode at the selected offset.") < (int)output_capacity ? 0 : -2;
     }
-    for (size_t i = 4; i < region_count; i++) {
-        cs_insn *insn = &region[i];
-        if (strcmp(insn->mnemonic, "stp") == 0 &&
-            strstr(insn->op_str, "x29, x30, [sp") != NULL) {
-            end = insn->address;
-            break;
+
+    // A linker/PLT-style stub is a four-instruction ADRP/LDR/ADD/BR sequence.
+    int is_linker_stub = 0;
+    uint64_t slot_va = 0;
+    if (region_count >= 4 &&
+        strcmp(region[0].mnemonic, "adrp") == 0 &&
+        strcmp(region[1].mnemonic, "ldr") == 0 &&
+        strcmp(region[2].mnemonic, "add") == 0 &&
+        strcmp(region[3].mnemonic, "br") == 0 &&
+        strstr(region[0].op_str, "x16,") != NULL &&
+        strstr(region[1].op_str, "x17, [x16") != NULL &&
+        strstr(region[2].op_str, "x16, x16") != NULL &&
+        strstr(region[3].op_str, "x17") != NULL) {
+        uint64_t page = 0, load_delta = 0;
+        if (parse_hash_immediate(region[0].op_str, &page) &&
+            parse_hash_immediate(region[1].op_str, &load_delta)) {
+            slot_va = page + load_delta;
+            is_linker_stub = 1;
         }
     }
-    cs_free(region, region_count);
-    scan_length = (size_t)(end - function_offset);
-    region = NULL;
-    region_count = cs_disasm(handle, file + text_offset + function_offset,
-                             scan_length, function_offset, 0, &region);
-    if (append_text(output, output_capacity, &used,
-                    "function|offset=%08llx|estimated_end=%08llx|bytes=%llu\n",
-                    (unsigned long long)function_offset, (unsigned long long)end,
-                    (unsigned long long)(end - function_offset)) != 0) {
-        if (region) cs_free(region, region_count);
-        cs_close(&handle); return -2;
+
+    // Walk reachable control flow from the selected entry. Conditional branches
+    // retain their fallthrough edge; direct B follows only its target; RET/BR
+    // terminate a path. BL/BLR are calls and continue at the next instruction.
+    enum { MAX_REGION_INSNS = 512 };
+    uint8_t reachable[MAX_REGION_INSNS] = {0};
+    int queue[MAX_REGION_INSNS];
+    size_t queue_head = 0, queue_tail = 0;
+    uint64_t estimated_end = function_offset;
+    uint32_t reachable_count = 0, return_count = 0, tail_branch_count = 0;
+    if (region_count > MAX_REGION_INSNS) region_count = MAX_REGION_INSNS;
+    reachable[0] = 1;
+    queue[queue_tail++] = 0;
+    while (queue_head < queue_tail) {
+        int index = queue[queue_head++];
+        cs_insn *insn = &region[index];
+        uint64_t next = insn->address + insn->size;
+        if (next > estimated_end) estimated_end = next;
+        reachable_count++;
+
+        if (strcmp(insn->mnemonic, "ret") == 0) {
+            return_count++;
+            continue;
+        }
+        if (strcmp(insn->mnemonic, "br") == 0) {
+            tail_branch_count++;
+            continue;
+        }
+        if (is_direct_branch(insn->mnemonic)) {
+            uint64_t target = 0;
+            int has_target = parse_hash_immediate(insn->op_str, &target);
+            int target_index = has_target ? find_instruction_at(region, region_count, target) : -1;
+            if (target_index >= 0 && !reachable[target_index]) {
+                reachable[target_index] = 1;
+                if (queue_tail < MAX_REGION_INSNS) queue[queue_tail++] = target_index;
+            } else if (target_index < 0) {
+                tail_branch_count++;
+            }
+            if (is_conditional_branch(insn->mnemonic)) {
+                int fallthrough = find_instruction_at(region, region_count, next);
+                if (fallthrough >= 0 && !reachable[fallthrough]) {
+                    reachable[fallthrough] = 1;
+                    if (queue_tail < MAX_REGION_INSNS) queue[queue_tail++] = fallthrough;
+                }
+            }
+            continue;
+        }
+        int fallthrough = find_instruction_at(region, region_count, next);
+        if (fallthrough >= 0 && !reachable[fallthrough]) {
+            reachable[fallthrough] = 1;
+            if (queue_tail < MAX_REGION_INSNS) queue[queue_tail++] = fallthrough;
+        }
     }
+
+    const char *kind = is_linker_stub ? "linker-stub" : "code";
+    if (append_text(output, output_capacity, &used,
+                    "function|offset=%08llx|estimated_end=%08llx|bytes=%llu|kind=%s|reachable_instructions=%u\n",
+                    (unsigned long long)function_offset, (unsigned long long)estimated_end,
+                    (unsigned long long)(estimated_end - function_offset), kind, reachable_count) != 0) {
+        cs_free(region, region_count); cs_close(&handle); return -2;
+    }
+
+    if (is_linker_stub) {
+        size_t pointer_file_offset = 0;
+        if (map_nso_va_to_file(file, file_size, slot_va, 8, &pointer_file_offset)) {
+            uint64_t raw_target = 0;
+            for (size_t b = 0; b < 8; b++) raw_target |= (uint64_t)file[pointer_file_offset + b] << (b * 8);
+            if (append_text(output, output_capacity, &used,
+                            "stub|type=adrp-ldr-add-br|slot_va=%08llx|slot_file_offset=%08llx|raw_pointer=%016llx\n",
+                            (unsigned long long)slot_va, (unsigned long long)pointer_file_offset,
+                            (unsigned long long)raw_target) != 0) {
+                cs_free(region, region_count); cs_close(&handle); return -2;
+            }
+            uint32_t text_mem = read_le32(file + 0x14);
+            if (raw_target >= text_mem && raw_target - text_mem < text_size) {
+                if (append_text(output, output_capacity, &used,
+                                "stub_target|text_offset=%08llx|resolution=static-pointer-in-text\n",
+                                (unsigned long long)(raw_target - text_mem)) != 0) {
+                    cs_free(region, region_count); cs_close(&handle); return -2;
+                }
+            } else {
+                if (append_text(output, output_capacity, &used,
+                                "stub_target|resolution=not-a-static-text-address\n") != 0) {
+                    cs_free(region, region_count); cs_close(&handle); return -2;
+                }
+            }
+        } else if (append_text(output, output_capacity, &used,
+                               "stub|type=adrp-ldr-add-br|slot_va=%08llx|resolution=slot-not-file-backed\n",
+                               (unsigned long long)slot_va) != 0) {
+            cs_free(region, region_count); cs_close(&handle); return -2;
+        }
+    }
+
+    uint32_t direct_callees = 0;
     for (size_t i = 0; i < region_count; i++) {
+        if (!reachable[i]) continue;
         cs_insn *insn = &region[i];
         if (append_text(output, output_capacity, &used, "insn|%08llx|%s|%s\n",
                         (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
             cs_free(region, region_count); cs_close(&handle); return -2;
         }
         if (strcmp(insn->mnemonic, "bl") == 0) {
-            const char *hash = strchr(insn->op_str, '#');
-            if (hash && append_text(output, output_capacity, &used, "callee|%08llx|%08llx\n",
-                                    (unsigned long long)insn->address,
-                                    strtoull(hash + 1, NULL, 0)) != 0) {
-                cs_free(region, region_count); cs_close(&handle); return -2;
+            uint64_t target = 0;
+            if (parse_hash_immediate(insn->op_str, &target)) {
+                if (append_text(output, output_capacity, &used, "callee|%08llx|%08llx\n",
+                                (unsigned long long)insn->address,
+                                (unsigned long long)target) != 0) {
+                    cs_free(region, region_count); cs_close(&handle); return -2;
+                }
+                direct_callees++;
+            }
+        } else if (strcmp(insn->mnemonic, "b") == 0) {
+            uint64_t target = 0;
+            if (parse_hash_immediate(insn->op_str, &target) &&
+                (target < function_offset || target >= estimated_end)) {
+                if (append_text(output, output_capacity, &used, "tail_call|%08llx|%08llx\n",
+                                (unsigned long long)insn->address,
+                                (unsigned long long)target) != 0) {
+                    cs_free(region, region_count); cs_close(&handle); return -2;
+                }
             }
         }
     }
@@ -257,8 +413,9 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
         for (size_t i = 0; i < count; i++) {
             cs_insn *insn = &items[i];
             if (strcmp(insn->mnemonic, "bl") == 0) {
-                const char *hash = strchr(insn->op_str, '#');
-                if (hash && strtoull(hash + 1, NULL, 0) == function_offset && callers < 64) {
+                uint64_t target = 0;
+                if (parse_hash_immediate(insn->op_str, &target) &&
+                    target == function_offset && callers < 64) {
                     if (append_text(output, output_capacity, &used, "caller|%08llx\n",
                                     (unsigned long long)insn->address) != 0) {
                         cs_free(items, count); cs_close(&handle); return -2;
@@ -270,8 +427,8 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
         cs_free(items, count);
     }
     if (append_text(output, output_capacity, &used,
-                    "summary|caller_sites_listed=%u|caller_limit=64|boundary=next-prologue-or-0x600-byte-window\n",
-                    callers) != 0) {
+                    "summary|caller_sites_listed=%u|caller_limit=64|direct_callees=%u|returns=%u|tail_or_indirect_exits=%u|boundary=reachable-control-flow\n",
+                    callers, direct_callees, return_count, tail_branch_count) != 0) {
         cs_close(&handle); return -2;
     }
     cs_close(&handle);
