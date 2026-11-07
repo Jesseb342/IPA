@@ -166,6 +166,98 @@ public static unsafe class NxNativeExtractor {
         }
     }
 
+
+    // C ABI: int nxn_inspect_nso(exefsDirectory, output, capacity)
+    // Header/layout inspection only: no decompression, hashing, or rewriting yet.
+    [UnmanagedCallersOnly(EntryPoint = "nxn_inspect_nso", CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static int InspectNso(byte* directoryPointer, byte* outputPointer, int outputCapacity)
+    {
+        if (directoryPointer == null || outputPointer == null || outputCapacity <= 1) return -1;
+        string directory = Marshal.PtrToStringUTF8((IntPtr)directoryPointer);
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+            return WriteOutput(outputPointer, outputCapacity, "error|ExeFS directory does not exist.");
+
+        var report = new StringBuilder();
+        int inspected = 0;
+        try
+        {
+            foreach (string path in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories).OrderBy(p => p, StringComparer.Ordinal))
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                if (stream.Length < 4) continue;
+                byte[] magic = new byte[4];
+                stream.ReadExactly(magic);
+                stream.Position = 0;
+                string fileMagic = Encoding.ASCII.GetString(magic);
+                if (fileMagic == "NSO0")
+                {
+                    if (stream.Length < 0x100) throw new InvalidDataException($"{Path.GetFileName(path)}: NSO header is truncated.");
+                    byte[] header = new byte[0x100];
+                    stream.ReadExactly(header);
+                    uint flags = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x0c, 4));
+                    uint[] fileOffsets = new uint[3], memoryOffsets = new uint[3], sizes = new uint[3], storedSizes = new uint[3];
+                    string[] names = { "text", "ro", "data" };
+                    for (int i = 0; i < 3; i++)
+                    {
+                        int at = 0x10 + i * 0x10;
+                        fileOffsets[i] = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(at, 4));
+                        memoryOffsets[i] = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(at + 4, 4));
+                        sizes[i] = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(at + 8, 4));
+                        storedSizes[i] = (flags & (1u << i)) != 0
+                            ? BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x60 + i * 4, 4))
+                            : sizes[i];
+                        if (memoryOffsets[i] % 0x1000 != 0) throw new InvalidDataException($"{Path.GetFileName(path)}: {names[i]} segment is not page-aligned.");
+                        if (sizes[i] > 0x7fffffff) throw new InvalidDataException($"{Path.GetFileName(path)}: {names[i]} segment exceeds Horizon's size limit.");
+                        if ((ulong)fileOffsets[i] + storedSizes[i] > (ulong)stream.Length) throw new InvalidDataException($"{Path.GetFileName(path)}: {names[i]} segment extends past end of file.");
+                        if ((flags & (1u << i)) != 0 && storedSizes[i] > sizes[i]) throw new InvalidDataException($"{Path.GetFileName(path)}: compressed {names[i]} segment is larger than its loaded size.");
+                        if ((flags & (1u << i)) != 0 && (flags & (1u << 7)) == 0 && (ulong)sizes[i] > (ulong)storedSizes[i] * 255) throw new InvalidDataException($"{Path.GetFileName(path)}: impossible LZ4 expansion ratio in {names[i]} segment.");
+                        if (i == 0 && memoryOffsets[i] != 0) throw new InvalidDataException($"{Path.GetFileName(path)}: text segment does not start at offset zero.");
+                        if (i > 0 && (ulong)memoryOffsets[i] < (ulong)memoryOffsets[i - 1] + sizes[i - 1]) throw new InvalidDataException($"{Path.GetFileName(path)}: segments overlap or are out of order.");
+                    }
+                    string buildId = Convert.ToHexString(header.AsSpan(0x40, 0x20)).ToLowerInvariant();
+                    string compression = (flags & 0x80) != 0 ? "ZBIC/zstd" : (flags & 0x07) != 0 ? "LZ4" : "none";
+                    report.AppendLine($"module|{Path.GetFileName(path)}|NSO|{buildId}|{flags:x8}|{compression}|text={memoryOffsets[0]:x}+{sizes[0]:x}|ro={memoryOffsets[1]:x}+{sizes[1]:x}|data={memoryOffsets[2]:x}+{sizes[2]:x}|bss={BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x3c, 4)):x}");
+                    inspected++;
+                }
+                else if (stream.Length >= 0x80)
+                {
+                    stream.Position = 0x10;
+                    byte[] nroMagic = new byte[4];
+                    stream.ReadExactly(nroMagic);
+                    if (Encoding.ASCII.GetString(nroMagic) != "NRO0") continue;
+                    stream.Position = 0;
+                    byte[] header = new byte[0x80];
+                    stream.ReadExactly(header);
+                    uint moduleSize = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x18, 4));
+                    uint nroFlags = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x1c, 4));
+                    if ((nroFlags & 2) != 0) throw new InvalidDataException($"{Path.GetFileName(path)}: compressed NRO is not supported by this inspector yet.");
+                    uint[] offsets = new uint[3], sizes = new uint[3];
+                    string[] names = { "text", "ro", "data" };
+                    uint expectedOffset = 0;
+                    for (int i = 0; i < 3; i++)
+                    {
+                        int at = 0x20 + i * 8;
+                        offsets[i] = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(at, 4));
+                        sizes[i] = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(at + 4, 4));
+                        if (offsets[i] != expectedOffset || sizes[i] % 0x1000 != 0) throw new InvalidDataException($"{Path.GetFileName(path)}: NRO {names[i]} segment is not page-aligned and contiguous.");
+                        expectedOffset = checked(offsets[i] + sizes[i]);
+                    }
+                    if (expectedOffset != moduleSize || moduleSize > stream.Length) throw new InvalidDataException($"{Path.GetFileName(path)}: NRO segment layout does not match module size.");
+                    string buildId = Convert.ToHexString(header.AsSpan(0x40, 0x20)).ToLowerInvariant();
+                    report.AppendLine($"module|{Path.GetFileName(path)}|NRO|{buildId}|{nroFlags:x8}|none|text={offsets[0]:x}+{sizes[0]:x}|ro={offsets[1]:x}+{sizes[1]:x}|data={offsets[2]:x}+{sizes[2]:x}|bss={BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x38, 4)):x}");
+                    inspected++;
+                }
+            }
+            if (inspected == 0) return WriteOutput(outputPointer, outputCapacity, "error|No NSO or NRO modules were found in ExeFS.");
+            report.Insert(0, $"summary|{inspected} module(s) inspected; headers and segment layouts validated. Decompression, SHA-256 verification, and rewriting are not included yet.\n");
+            return WriteOutput(outputPointer, outputCapacity, report.ToString());
+        }
+        catch (Exception e)
+        {
+            return WriteOutput(outputPointer, outputCapacity, "error|" + (e.Message ?? e.GetType().Name).Replace("\\r", " ").Replace("\\n", " "));
+        }
+    }
+
     private static int WriteOutput(byte* destination, int capacity, string value)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(value);
