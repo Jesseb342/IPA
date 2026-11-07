@@ -23,6 +23,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Runtime.CompilerServices;
 using System.Text;
 using LibHac.Common;
@@ -215,8 +216,31 @@ public static unsafe class NxNativeExtractor {
                         if (i == 0 && memoryOffsets[i] != 0) throw new InvalidDataException($"{Path.GetFileName(path)}: text segment does not start at offset zero.");
                         if (i > 0 && (ulong)memoryOffsets[i] < (ulong)memoryOffsets[i - 1] + sizes[i - 1]) throw new InvalidDataException($"{Path.GetFileName(path)}: segments overlap or are out of order.");
                     }
+                    if ((flags & 0x80) != 0) throw new NotSupportedException($"{Path.GetFileName(path)}: ZBIC/zstd compression is not supported by the current verifier.");
                     string buildId = Convert.ToHexString(header.AsSpan(0x40, 0x20)).ToLowerInvariant();
-                    string compression = (flags & 0x80) != 0 ? "ZBIC/zstd" : (flags & 0x07) != 0 ? "LZ4" : "none";
+                    string compression = (flags & 0x07) != 0 ? "LZ4" : "none";
+                    string[] hashNames = { "text", "ro", "data" };
+                    for (int i = 0; i < 3; i++)
+                    {
+                        if (sizes[i] == 0) continue;
+                        if (sizes[i] > 0x40000000) throw new InvalidDataException($"{Path.GetFileName(path)}: {hashNames[i]} segment is too large to verify safely.");
+                        stream.Position = fileOffsets[i];
+                        byte[] stored = new byte[checked((int)storedSizes[i])];
+                        stream.ReadExactly(stored);
+                        byte[] expanded;
+                        if ((flags & (1u << i)) != 0)
+                            expanded = DecodeLz4Block(stored, checked((int)sizes[i]));
+                        else
+                        {
+                            if (stored.Length != sizes[i]) throw new InvalidDataException($"{Path.GetFileName(path)}: uncompressed {hashNames[i]} size mismatch.");
+                            expanded = stored;
+                        }
+                        byte[] actualHash = SHA256.HashData(expanded);
+                        byte[] expectedHash = header.AsSpan(0xA0 + i * 0x20, 0x20).ToArray();
+                        if (!CryptographicOperations.FixedTimeEquals(actualHash, expectedHash))
+                            throw new InvalidDataException($"{Path.GetFileName(path)}: {hashNames[i]} SHA-256 mismatch after {(compression == "LZ4" && (flags & (1u << i)) != 0 ? "LZ4 decompression" : "reading")}.");
+                        report.AppendLine($"segment|{Path.GetFileName(path)}|{hashNames[i]}|{compression}|stored={storedSizes[i]:x}|expanded={expanded.Length:x}|sha256=OK");
+                    }
                     report.AppendLine($"module|{Path.GetFileName(path)}|NSO|{buildId}|{flags:x8}|{compression}|text={memoryOffsets[0]:x}+{sizes[0]:x}|ro={memoryOffsets[1]:x}+{sizes[1]:x}|data={memoryOffsets[2]:x}+{sizes[2]:x}|bss={BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(0x3c, 4)):x}");
                     inspected++;
                 }
@@ -257,6 +281,57 @@ public static unsafe class NxNativeExtractor {
         {
             return WriteOutput(outputPointer, outputCapacity, "error|" + (e.Message ?? e.GetType().Name).Replace("\\r", " ").Replace("\\n", " "));
         }
+    }
+
+    // Decode a raw LZ4 block (the format used by compressed NSO segments) into its exact declared size.
+    private static byte[] DecodeLz4Block(byte[] source, int expectedLength)
+    {
+        byte[] destination = new byte[expectedLength];
+        int input = 0, output = 0;
+        while (input < source.Length)
+        {
+            byte token = source[input++];
+            int literalLength = token >> 4;
+            if (literalLength == 15)
+            {
+                byte extension;
+                do
+                {
+                    if (input >= source.Length) throw new InvalidDataException("Truncated LZ4 literal length.");
+                    extension = source[input++];
+                    literalLength = checked(literalLength + extension);
+                } while (extension == 255);
+            }
+            if (literalLength > source.Length - input || literalLength > destination.Length - output)
+                throw new InvalidDataException("LZ4 literal run exceeds its input or output bounds.");
+            Buffer.BlockCopy(source, input, destination, output, literalLength);
+            input += literalLength;
+            output += literalLength;
+            if (input == source.Length) break;
+
+            if (input + 2 > source.Length) throw new InvalidDataException("Truncated LZ4 match offset.");
+            int offset = source[input] | (source[input + 1] << 8);
+            input += 2;
+            if (offset <= 0 || offset > output) throw new InvalidDataException("Invalid LZ4 match offset.");
+            int matchLength = token & 0x0f;
+            if (matchLength == 15)
+            {
+                byte extension;
+                do
+                {
+                    if (input >= source.Length) throw new InvalidDataException("Truncated LZ4 match length.");
+                    extension = source[input++];
+                    matchLength = checked(matchLength + extension);
+                } while (extension == 255);
+            }
+            matchLength = checked(matchLength + 4);
+            if (matchLength > destination.Length - output) throw new InvalidDataException("LZ4 match exceeds declared output size.");
+            for (int j = 0; j < matchLength; j++)
+                destination[output + j] = destination[output - offset + j];
+            output += matchLength;
+        }
+        if (output != expectedLength) throw new InvalidDataException($"LZ4 output size mismatch: expected {expectedLength:x}, got {output:x}.");
+        return destination;
     }
 
     private static int WriteOutput(byte* destination, int capacity, string value)
