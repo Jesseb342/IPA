@@ -84,6 +84,13 @@ private enum GameExtractor {
     private static var frameworkHandle: UnsafeMutableRawPointer?
     private static var extractFunction: ExtractFunction?
 
+    typealias ExtractDLCFunction = @convention(c) (
+        UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>,
+        UnsafePointer<CChar>, UnsafeMutablePointer<CChar>, Int32
+    ) -> Int32
+
+    private static var extractDLCFunction: ExtractDLCFunction?
+
     static func extract(keysURL: URL, baseURL: URL, updateURL: URL?, outputDirectory: URL) throws -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -128,6 +135,88 @@ private enum GameExtractor {
         }
         return response
     }
+
+    static func extractDLC(keysURL: URL, dlcURL: URL, imageURL: URL, titleID: String) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if extractDLCFunction == nil {
+            let handle: UnsafeMutableRawPointer
+            if let existing = frameworkHandle {
+                handle = existing
+            } else {
+                let binary = Bundle.main.bundleURL
+                    .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
+                guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                    let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                    throw ImportValidationError.metadata("Could not load the DLC extraction engine: \(detail)")
+                }
+                frameworkHandle = loaded
+                handle = loaded
+            }
+            guard let symbol = dlsym(handle, "nxn_extract_dlc") else {
+                let detail = dlerror().map { String(cString: $0) } ?? "symbol not found"
+                throw ImportValidationError.metadata("The DLC extraction function is missing: \(detail)")
+            }
+            extractDLCFunction = unsafeBitCast(symbol, to: ExtractDLCFunction.self)
+        }
+
+        guard let extract = extractDLCFunction else {
+            throw ImportValidationError.metadata("The DLC extraction function could not be initialized.")
+        }
+
+        var output = [CChar](repeating: 0, count: 1024 * 1024)
+        let result = keysURL.path.withCString { keyPath in
+            dlcURL.path.withCString { packagePath in
+                imageURL.path.withCString { destinationPath in
+                    titleID.withCString { titleIDPointer in
+                        output.withUnsafeMutableBufferPointer { buffer in
+                            extract(keyPath, packagePath, destinationPath, titleIDPointer, buffer.baseAddress!, Int32(buffer.count))
+                        }
+                    }
+                }
+            }
+        }
+        let response = output.withUnsafeBufferPointer { buffer in String(cString: buffer.baseAddress!) }
+        guard result == 0 else {
+            let detail = response.isEmpty ? "The native DLC extractor returned code \(result)." : response
+            throw ImportValidationError.metadata("DLC extraction stopped (code \(result)).\n\(detail)")
+        }
+        return response
+    }
+
+    static func extractDLCs(keysURL: URL, dlcURLs: [URL], baseTitleID: String, outputDirectory: URL) throws -> String {
+        let aocDirectory = outputDirectory.appendingPathComponent("aoc", isDirectory: true)
+        try FileManager.default.createDirectory(at: aocDirectory, withIntermediateDirectories: true)
+
+        var extractedIndices = Set<UInt64>()
+        var logs: [String] = []
+        for packageURL in dlcURLs {
+            let records = try MetadataProbe.inspect(keysURL: keysURL, nspURL: packageURL)
+            let dlcRecords = records.filter { $0.type == "AddOnContent" }
+            guard !dlcRecords.isEmpty else {
+                throw ImportValidationError.metadata("\(packageURL.lastPathComponent) contains no AddOnContent metadata.")
+            }
+            var seenTitleIDs = Set<String>()
+            for record in dlcRecords where seenTitleIDs.insert(record.titleID).inserted {
+                let index = try ImportFileStorage.dlcIndex(titleID: record.titleID, baseTitleID: baseTitleID)
+                guard extractedIndices.insert(index).inserted else {
+                    throw ImportValidationError.metadata("DLC index \(index) appears in more than one selected package. Remove duplicate DLC packages.")
+                }
+                let imageURL = aocDirectory.appendingPathComponent("\(index).img")
+                let log = try extractDLC(keysURL: keysURL, dlcURL: packageURL, imageURL: imageURL, titleID: record.titleID)
+                let attributes = try FileManager.default.attributesOfItem(atPath: imageURL.path)
+                guard let size = (attributes[.size] as? NSNumber)?.uint64Value, size > 0 else {
+                    throw ImportValidationError.metadata("DLC \(record.titleID) produced an empty RomFS image.")
+                }
+                logs.append("DLC \(record.titleID) → aoc/\(index).img\n\(log)")
+            }
+        }
+        guard !extractedIndices.isEmpty else {
+            throw ImportValidationError.metadata("No DLC content records were available to extract.")
+        }
+        return logs.joined(separator: "\n")
+    }
 }
 
 private enum ImportKind: String, Identifiable, Sendable {
@@ -158,6 +247,11 @@ private struct ImportedGameFile: Codable, Identifiable, Equatable, Sendable {
     let storedName: String
     var validationStatus: String?
     var id: String { storedName }
+    var contentTitleID: String? {
+        let parts = (validationStatus ?? "").components(separatedBy: " · ")
+        guard parts.count >= 2, parts[1].count == 16 else { return nil }
+        return parts[1].uppercased()
+    }
 }
 
 private enum ImportValidationError: LocalizedError {
@@ -333,7 +427,18 @@ private enum ImportFileStorage {
         (0..<8).reduce(UInt64(0)) { $0 | (UInt64(data[offset + $1]) << (UInt64($1) * 8)) }
     }
 
-    static func inspectContent(_ source: URL, keysURL: URL, kind: ImportKind) throws -> String {
+    static func dlcIndex(titleID: String, baseTitleID: String) throws -> UInt64 {
+        guard let base = UInt64(baseTitleID, radix: 16),
+              let dlc = UInt64(titleID, radix: 16),
+              base <= UInt64.max - 0x1000,
+              (base >> 16) == (dlc >> 16),
+              dlc >= base + 0x1000 else {
+            throw ImportValidationError.metadata("DLC title ID (titleID) does not belong to base game (baseTitleID).")
+        }
+        return dlc - base - 0x1000
+    }
+
+    static func inspectContent(_ source: URL, keysURL: URL, kind: ImportKind, baseTitleID: String? = nil) throws -> String {
         let accessed = source.startAccessingSecurityScopedResource()
         defer { if accessed { source.stopAccessingSecurityScopedResource() } }
 
@@ -350,6 +455,14 @@ private enum ImportFileStorage {
             let found = Array(Set(records.map(\.type))).sorted().joined(separator: ", ")
             throw ImportValidationError.wrongContentType(expected: expected, found: found.isEmpty ? "unknown" : found)
         }
+        if kind == .dlc {
+            guard let baseTitleID else {
+                throw ImportValidationError.metadata("Verify the base game before importing DLC.")
+            }
+            for item in matching {
+                _ = try dlcIndex(titleID: item.titleID, baseTitleID: baseTitleID)
+            }
+        }
         let label: String
         switch kind {
         case .base: label = "Verified base game"
@@ -358,7 +471,8 @@ private enum ImportFileStorage {
         case .keys: label = "Keys syntax checked"
         }
         let extra = records.count > 1 ? " · package has \(records.count) metadata records" : ""
-        return "\(label) · \(record.titleID) · v\(record.version)\(extra)"
+        let dlcCount = kind == .dlc ? " · \(Set(matching.map(\.titleID)).count) DLC title(s)" : ""
+        return "\(label) · \(record.titleID) · v\(record.version)\(extra)\(dlcCount)"
     }
 
     static func copyIntoAppStorage(_ source: URL, prefix: String, validationStatus: String) throws -> ImportedGameFile {
@@ -454,7 +568,7 @@ private struct ImportScreenView: View {
     private var canChooseUpdate: Bool { baseVerified }
     private var canChooseDLC: Bool { updateVerified || noUpdateSelected }
     private var canExtract: Bool {
-        baseVerified && keys != nil && (updateVerified || noUpdateSelected) && dlcSelectionFinished && dlc.isEmpty
+        baseVerified && keys != nil && (updateVerified || noUpdateSelected) && dlcSelectionFinished
     }
 
     var body: some View {
@@ -575,7 +689,7 @@ private struct ImportScreenView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(importing || extracting)
                     } else if dlcSelectionFinished && !dlc.isEmpty {
-                        Text("DLC files are imported, but DLC extraction is not wired up yet. Remove the DLC selections to test base-game and update extraction.")
+                        Text("The selected DLC packages will be extracted into Documents/PreparedGame/aoc as indexed RomFS images.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -615,7 +729,7 @@ private struct ImportScreenView: View {
                         .font(.headline)
                         .foregroundStyle(base?.validationStatus?.hasPrefix("Verified base game") == true && keys != nil ? .green : .primary)
 
-                        Text("The app verifies encrypted CNMT metadata and can now extract the base game with an optional update. DLC extraction and game-specific IPA packaging are still under development.")
+                        Text("The app verifies encrypted CNMT metadata and extracts the base game, optional update, and selected DLC. Game-specific IPA packaging is still under development.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -741,6 +855,7 @@ private struct ImportScreenView: View {
         status = "Importing \(urls.count) file(s)…"
         do {
             let existingKeysURL = keys.map { storedURL(for: $0) }
+            let selectedBaseTitleID = base?.contentTitleID
             let imported = try await Task.detached(priority: .userInitiated) {
                 // Validate every selection before copying any of them. A bad item
                 // must not partially replace a previously valid selection.
@@ -750,7 +865,7 @@ private struct ImportScreenView: View {
                     if kind == .keys {
                         level = "Keys syntax checked"
                     } else if let existingKeysURL {
-                        level = try ImportFileStorage.inspectContent(source, keysURL: existingKeysURL, kind: kind)
+                        level = try ImportFileStorage.inspectContent(source, keysURL: existingKeysURL, kind: kind, baseTitleID: selectedBaseTitleID)
                     } else {
                         throw ImportValidationError.metadata("Import prod.keys before selecting NSP content.")
                     }
@@ -800,20 +915,33 @@ private struct ImportScreenView: View {
         let keyURL = storedURL(for: keys)
         let baseURL = storedURL(for: base)
         let updateURL = updateVerified ? update.map { storedURL(for: $0) } : nil
+        let dlcURLs = dlc.map { storedURL(for: $0) }
+        guard let baseTitleID = base.contentTitleID else {
+            extracting = false
+            status = "Extraction failed: the verified base game title ID is unavailable. Re-import the base NSP."
+            return
+        }
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let temporary = documents.appendingPathComponent("PreparedGame-\(UUID().uuidString)", isDirectory: true)
         let destination = documents.appendingPathComponent("PreparedGame", isDirectory: true)
 
         do {
             try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
-            status = "Extracting the base game\(updateURL == nil ? "" : " and update")…"
+            status = "Extracting the base game\(updateURL == nil ? "" : " and update")\(dlcURLs.isEmpty ? "" : ", plus DLC")…"
             let log = try await Task.detached(priority: .userInitiated) {
-                try GameExtractor.extract(
+                let baseLog = try GameExtractor.extract(
                     keysURL: keyURL,
                     baseURL: baseURL,
                     updateURL: updateURL,
                     outputDirectory: temporary
                 )
+                let dlcLog = dlcURLs.isEmpty ? "" : try GameExtractor.extractDLCs(
+                    keysURL: keyURL,
+                    dlcURLs: dlcURLs,
+                    baseTitleID: baseTitleID,
+                    outputDirectory: temporary
+                )
+                return [baseLog, dlcLog].filter { !$0.isEmpty }.joined(separator: "\n")
             }.value
 
             let exefs = temporary.appendingPathComponent("ExeFS", isDirectory: true)
@@ -909,7 +1037,13 @@ private struct ImportScreenView: View {
             let checkedBase = checkedFile(baseSnapshot, url: baseURL, kind: .base)
             let checkedUpdate = checkedFile(updateSnapshot, url: updateURL, kind: .update)
             let checkedDLC = dlcSnapshot.enumerated().map { index, item -> ImportedGameFile in
-                checkedFile(item, url: dlcURLs[index], kind: .dlc) ?? item
+                guard var checked = checkedFile(item, url: dlcURLs[index], kind: .dlc) else { return item }
+                do {
+                    checked.validationStatus = try ImportFileStorage.inspectContent(dlcURLs[index], keysURL: keyURL, kind: .dlc, baseTitleID: checkedBase?.contentTitleID)
+                } catch {
+                    checked.validationStatus = error.localizedDescription
+                }
+                return checked
             }
             return (checkedBase, checkedUpdate, checkedDLC)
         }.value
