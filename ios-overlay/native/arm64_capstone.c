@@ -259,21 +259,31 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
         return snprintf(output, output_capacity, "error|Capstone could not decode at the selected offset.") < (int)output_capacity ? 0 : -2;
     }
 
-    // A linker/PLT-style stub is a four-instruction ADRP/LDR/ADD/BR sequence.
+    // Linker stubs may optionally save x16/x30 before the ADRP/LDR/ADD/BR
+    // sequence. Recognize both layouts without mistaking an arbitrary STP for
+    // part of the stub.
     int is_linker_stub = 0;
+    int stub_has_save_prologue = 0;
+    size_t stub_sequence_start = 0;
     uint64_t slot_va = 0;
-    if (region_count >= 4 &&
-        strcmp(region[0].mnemonic, "adrp") == 0 &&
-        strcmp(region[1].mnemonic, "ldr") == 0 &&
-        strcmp(region[2].mnemonic, "add") == 0 &&
-        strcmp(region[3].mnemonic, "br") == 0 &&
-        strstr(region[0].op_str, "x16,") != NULL &&
-        strstr(region[1].op_str, "x17, [x16") != NULL &&
-        strstr(region[2].op_str, "x16, x16") != NULL &&
-        strstr(region[3].op_str, "x17") != NULL) {
+    if (region_count >= 5 &&
+        strcmp(region[0].mnemonic, "stp") == 0 &&
+        strstr(region[0].op_str, "x16, x30, [sp, #-0x10]!") != NULL) {
+        stub_has_save_prologue = 1;
+        stub_sequence_start = 1;
+    }
+    if (region_count >= stub_sequence_start + 4 &&
+        strcmp(region[stub_sequence_start + 0].mnemonic, "adrp") == 0 &&
+        strcmp(region[stub_sequence_start + 1].mnemonic, "ldr") == 0 &&
+        strcmp(region[stub_sequence_start + 2].mnemonic, "add") == 0 &&
+        strcmp(region[stub_sequence_start + 3].mnemonic, "br") == 0 &&
+        strstr(region[stub_sequence_start + 0].op_str, "x16,") != NULL &&
+        strstr(region[stub_sequence_start + 1].op_str, "x17, [x16") != NULL &&
+        strstr(region[stub_sequence_start + 2].op_str, "x16, x16") != NULL &&
+        strstr(region[stub_sequence_start + 3].op_str, "x17") != NULL) {
         uint64_t page = 0, load_delta = 0;
-        if (parse_hash_immediate(region[0].op_str, &page) &&
-            parse_hash_immediate(region[1].op_str, &load_delta)) {
+        if (parse_hash_immediate(region[stub_sequence_start + 0].op_str, &page) &&
+            parse_hash_immediate(region[stub_sequence_start + 1].op_str, &load_delta)) {
             slot_va = page + load_delta;
             is_linker_stub = 1;
         }
@@ -351,17 +361,24 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
                             (unsigned long long)raw_target) != 0) {
                 cs_free(region, region_count); cs_close(&handle); return -2;
             }
-            uint32_t text_mem = read_le32(file + 0x14);
-            if (raw_target >= text_mem && raw_target - text_mem < text_size) {
+            if (raw_target == 0) {
                 if (append_text(output, output_capacity, &used,
-                                "stub_target|text_offset=%08llx|resolution=static-pointer-in-text\n",
-                                (unsigned long long)(raw_target - text_mem)) != 0) {
+                                "stub_target|resolution=null-or-unresolved\\n") != 0) {
                     cs_free(region, region_count); cs_close(&handle); return -2;
                 }
             } else {
-                if (append_text(output, output_capacity, &used,
-                                "stub_target|resolution=not-a-static-text-address\n") != 0) {
-                    cs_free(region, region_count); cs_close(&handle); return -2;
+                uint32_t text_mem = read_le32(file + 0x14);
+                if (raw_target >= text_mem && raw_target - text_mem < text_size) {
+                    if (append_text(output, output_capacity, &used,
+                                    "stub_target|text_offset=%08llx|resolution=static-pointer-in-text\\n",
+                                    (unsigned long long)(raw_target - text_mem)) != 0) {
+                        cs_free(region, region_count); cs_close(&handle); return -2;
+                    }
+                } else {
+                    if (append_text(output, output_capacity, &used,
+                                    "stub_target|resolution=not-a-static-text-address\\n") != 0) {
+                        cs_free(region, region_count); cs_close(&handle); return -2;
+                    }
                 }
             }
         } else if (append_text(output, output_capacity, &used,
