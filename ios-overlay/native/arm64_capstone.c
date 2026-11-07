@@ -231,28 +231,43 @@ static int resolve_linker_stub_at(csh handle, const uint8_t *file, size_t file_s
                                   size_t *slot_file_offset, int *has_save) {
     if (offset >= text_size || (offset & 3u) != 0) return 0;
     uint64_t decode_start = offset;
-    if (offset >= 4) {
-        cs_insn *prior = NULL;
-        size_t prior_count = cs_disasm(handle, file + text_file_offset + offset - 4,
-                                       text_size - (size_t)(offset - 4) < 4 ? text_size - (size_t)(offset - 4) : 4,
-                                       offset - 4, 1, &prior);
-        if (prior_count == 1 && strcmp(prior[0].mnemonic, "stp") == 0 &&
-            strstr(prior[0].op_str, "x16, x30, [sp, #-0x10]!") != NULL) {
-            *has_save = 1;
-            decode_start = offset - 4;
-        } else {
-            *has_save = 0;
-        }
-        if (prior) cs_free(prior, prior_count);
-    } else {
-        *has_save = 0;
-    }
-
-    size_t available = text_size - (size_t)decode_start;
+    size_t available = text_size - (size_t)offset;
     if (available > 20) available = 20;
     cs_insn *items = NULL;
-    size_t count = cs_disasm(handle, file + text_file_offset + decode_start,
-                             available, decode_start, 5, &items);
+    size_t count = cs_disasm(handle, file + text_file_offset + offset,
+                             available, offset, 5, &items);
+    int begins_with_save = count >= 5 &&
+        strcmp(items[0].mnemonic, "stp") == 0 &&
+        strstr(items[0].op_str, "x16, x30, [sp, #-0x10]!") != NULL;
+    if (begins_with_save) {
+        *has_save = 1;
+    } else {
+        *has_save = 0;
+        if (items) cs_free(items, count);
+        items = NULL;
+        count = 0;
+        if (offset < 4) return 0;
+        cs_insn *prior = NULL;
+        size_t prior_count = cs_disasm(handle, file + text_file_offset + offset - 4,
+                                       4, offset - 4, 1, &prior);
+        int prior_save = prior_count == 1 &&
+            strcmp(prior[0].mnemonic, "stp") == 0 &&
+            strstr(prior[0].op_str, "x16, x30, [sp, #-0x10]!") != NULL;
+        if (prior) cs_free(prior, prior_count);
+        if (prior_save) {
+            *has_save = 1;
+            decode_start = offset - 4;
+            available = text_size - (size_t)decode_start;
+            if (available > 20) available = 20;
+            count = cs_disasm(handle, file + text_file_offset + decode_start,
+                              available, decode_start, 5, &items);
+        } else {
+            available = text_size - (size_t)offset;
+            if (available > 16) available = 16;
+            count = cs_disasm(handle, file + text_file_offset + offset,
+                              available, offset, 4, &items);
+        }
+    }
     size_t first = *has_save ? 1 : 0;
     int matched = count >= first + 4 &&
         strcmp(items[first + 0].mnemonic, "adrp") == 0 &&
@@ -270,13 +285,11 @@ static int resolve_linker_stub_at(csh handle, const uint8_t *file, size_t file_s
     if (matched) {
         *stub_start = decode_start;
         *slot_va = page + delta;
-        *slot_file_offset = 0;
+        *slot_file_offset = SIZE_MAX;
         *raw_pointer = 0;
         if (map_nso_va_to_file(file, file_size, *slot_va, 8, slot_file_offset)) {
             for (size_t b = 0; b < 8; b++)
                 *raw_pointer |= (uint64_t)file[*slot_file_offset + b] << (b * 8);
-        } else {
-            *slot_file_offset = SIZE_MAX;
         }
     }
     if (items) cs_free(items, count);
@@ -322,7 +335,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
         if (length > chunk_size) length = chunk_size;
         // A 16-byte overlap ensures a trampoline straddling a chunk boundary
         // remains visible in full; duplicate starts are filtered below.
-        if (base + length < text_size && length >= 16) length = length;
+        if (base + length < text_size && length <= SIZE_MAX - 20) length += 20;
         cs_insn *items = NULL;
         size_t count = cs_disasm(handle, file + text_file_offset + base, length,
                                  (uint64_t)base, 0, &items);
