@@ -1147,16 +1147,17 @@ private struct ImportScreenView: View {
         rewriteLog = ""
         defer { rewritingModules = false }
 
-        let prepared = documentsDirectory.appendingPathComponent("PreparedGame", isDirectory: true)
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let prepared = documents.appendingPathComponent("PreparedGame", isDirectory: true)
         let exefs = prepared.appendingPathComponent("ExeFS", isDirectory: true)
         let rewritten = prepared.appendingPathComponent("RewrittenExeFS", isDirectory: true)
         do {
             let report = try await Task.detached(priority: .userInitiated) {
                 try GameExtractor.rewriteNSOModules(exefsURL: exefs, outputURL: rewritten)
             }.value
-            rewriteLog = report + "\\nOutput: Documents/PreparedGame/RewrittenExeFS\\nOriginal ExeFS was left unchanged. No game-specific patches were applied in this test."
+            rewriteLog = report + "\nOutput: Documents/PreparedGame/RewrittenExeFS\nOriginal ExeFS was left unchanged. No game-specific patches were applied in this test."
         } catch {
-            rewriteLog = "Rewrite failed: \\(error.localizedDescription)"
+            rewriteLog = "Rewrite failed: \(error.localizedDescription)"
         }
     }
 
