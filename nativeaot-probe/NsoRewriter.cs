@@ -203,7 +203,6 @@ public static unsafe class NxNativeNsoRewriter
                 throw new InvalidDataException($"{Path.GetFileName(source)}: patch {patch.Offset:x} extends beyond the text segment.");
             if (!segments[0].AsSpan(patch.Offset, patch.Expected.Length).SequenceEqual(patch.Expected))
                 throw new InvalidDataException($"{Path.GetFileName(source)}: original bytes do not match at text+0x{patch.Offset:x}; refusing to patch build {buildId}.");
-            segments[0].AsSpan(patch.Offset, patch.Replacement.Length).CopyTo(segments[0].AsSpan(patch.Offset));
             patch.Replacement.CopyTo(segments[0], patch.Offset);
             applied++;
         }
