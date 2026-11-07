@@ -91,6 +91,56 @@ private enum GameExtractor {
 
     private static var extractDLCFunction: ExtractDLCFunction?
 
+
+    typealias InspectNsoFunction = @convention(c) (
+        UnsafePointer<CChar>, UnsafeMutablePointer<CChar>, Int32
+    ) -> Int32
+
+    private static var inspectNsoFunction: InspectNsoFunction?
+
+    static func inspectNSOModules(exefsURL: URL) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if inspectNsoFunction == nil {
+            let handle: UnsafeMutableRawPointer
+            if let existing = frameworkHandle {
+                handle = existing
+            } else {
+                let binary = Bundle.main.bundleURL
+                    .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
+                guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                    let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                    throw ImportValidationError.metadata("Could not load the NSO inspection engine: \\(detail)")
+                }
+                frameworkHandle = loaded
+                handle = loaded
+            }
+            guard let symbol = dlsym(handle, "nxn_inspect_nso") else {
+                throw ImportValidationError.metadata("The NSO inspection function is missing.")
+            }
+            inspectNsoFunction = unsafeBitCast(symbol, to: InspectNsoFunction.self)
+        }
+
+        guard let inspect = inspectNsoFunction else {
+            throw ImportValidationError.metadata("The NSO inspection function could not be initialized.")
+        }
+        var output = [CChar](repeating: 0, count: 256 * 1024)
+        let result = exefsURL.path.withCString { path in
+            output.withUnsafeMutableBufferPointer { buffer in
+                inspect(path, buffer.baseAddress!, Int32(buffer.count))
+            }
+        }
+        let response = output.withUnsafeBufferPointer { buffer in String(cString: buffer.baseAddress!) }
+        guard result >= 0 else {
+            throw ImportValidationError.metadata("NSO inspection output exceeded its safety limit.")
+        }
+        if response.hasPrefix("error|") {
+            throw ImportValidationError.metadata(String(response.dropFirst(6)))
+        }
+        return response
+    }
+
     static func extract(keysURL: URL, baseURL: URL, updateURL: URL?, outputDirectory: URL) throws -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -552,6 +602,9 @@ private struct ImportScreenView: View {
     @State private var picker: ImportPickerRequest?
     @State private var importing = false
     @State private var extracting = false
+    @State private var inspectingModules = false
+    @State private var gameExtracted = false
+    @State private var inspectionLog = ""
     @State private var extractionLog = ""
     @State private var status = ""
     @State private var noUpdateSelected = false
@@ -692,6 +745,30 @@ private struct ImportScreenView: View {
                         Text("The selected DLC packages will be extracted into Documents/PreparedGame/aoc as indexed RomFS images.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                    }
+
+                    if gameExtracted {
+                        Button {
+                            Task { await inspectGameModules() }
+                        } label: {
+                            Label("Inspect NSO modules", systemImage: "doc.text.magnifyingglass")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(extracting || inspectingModules)
+                    }
+                    if inspectingModules {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Inspecting ExeFS module headers…").foregroundStyle(.secondary)
+                        }
+                    }
+                    if !inspectionLog.isEmpty {
+                        Text(inspectionLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
 
                     if importing {
@@ -971,6 +1048,8 @@ private struct ImportScreenView: View {
             try? mutableDestination.setResourceValues(values)
 
             extractionLog = log.isEmpty ? "Extraction completed." : log
+            gameExtracted = true
+            inspectionLog = ""
             status = "Extraction complete. Files are saved in Documents/PreparedGame."
         } catch {
             try? FileManager.default.removeItem(at: temporary)
@@ -978,6 +1057,27 @@ private struct ImportScreenView: View {
             status = "Extraction failed: \(error.localizedDescription)"
         }
         extracting = false
+    }
+
+
+    private func inspectGameModules() async {
+        guard gameExtracted else { return }
+        inspectingModules = true
+        inspectionLog = ""
+        status = "Checking extracted executable modules…"
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let exefs = documents.appendingPathComponent("PreparedGame/ExeFS", isDirectory: true)
+        do {
+            let report = try await Task.detached(priority: .userInitiated) {
+                try GameExtractor.inspectNSOModules(exefsURL: exefs)
+            }.value
+            inspectionLog = report
+            status = "NSO inspection complete. No module bytes were modified."
+        } catch {
+            inspectionLog = error.localizedDescription
+            status = "NSO inspection failed: \\(error.localizedDescription)"
+        }
+        inspectingModules = false
     }
 
     private func loadSavedFiles() {
