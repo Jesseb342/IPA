@@ -157,6 +157,7 @@ jobs:
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nsp'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_extract_game'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_extract_dlc'
+          nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nso'
 
           # The shell builder signs the app before this framework exists.
           # Sign the nested framework first, then re-sign the containing app.
@@ -211,7 +212,7 @@ jobs:
 
           binary = pathlib.Path(sys.argv[1])
           data = binary.read_bytes()
-          required = (b"ImportScreenView", b"_dm_show_import_screen", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc")
+          required = (b"ImportScreenView", b"_dm_show_import_screen", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso")
           missing = [item.decode() for item in required if item not in data]
           if missing:
               print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
