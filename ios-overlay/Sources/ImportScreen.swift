@@ -115,6 +115,12 @@ private enum GameExtractor {
         UnsafeRawPointer, Int, UInt32, UnsafeMutablePointer<CChar>, Int
     ) -> Int32
 
+    typealias Arm64AnalyzeFunction = @convention(c) (
+        UnsafeRawPointer, Int, UnsafeMutablePointer<CChar>, Int
+    ) -> Int32
+
+    private static var arm64AnalyzeFunction: Arm64AnalyzeFunction?
+
     private static var arm64FrameworkHandle: UnsafeMutableRawPointer?
     private static var arm64DisassembleFunction: Arm64DisassembleFunction?
 
@@ -152,6 +158,47 @@ private enum GameExtractor {
         let response = output.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
         guard result == 0 else {
             throw ImportValidationError.metadata(response.isEmpty ? "AArch64 encoder vectors failed (code \(result))." : response)
+        }
+        return response
+    }
+
+    static func analyzeNSO(url: URL) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if arm64AnalyzeFunction == nil {
+            let binary = Bundle.main.bundleURL
+                .appendingPathComponent("Frameworks/NxNativeArm64.framework/NxNativeArm64")
+            guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                throw ImportValidationError.metadata("Could not load Capstone analyzer: \(detail)")
+            }
+            arm64FrameworkHandle = loaded
+            guard let symbol = dlsym(loaded, "nxn_arm64_analyze_nso") else {
+                throw ImportValidationError.metadata("Capstone's full NSO analyzer is missing.")
+            }
+            arm64AnalyzeFunction = unsafeBitCast(symbol, to: Arm64AnalyzeFunction.self)
+        }
+
+        guard let analyze = arm64AnalyzeFunction else {
+            throw ImportValidationError.metadata("Capstone full-text analysis could not be initialized.")
+        }
+        let data: Data
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
+        catch { throw ImportValidationError.metadata("Could not read rewritten NSO: \(error.localizedDescription)") }
+        var output = [CChar](repeating: 0, count: 64 * 1024)
+        let result = data.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return Int32(-1) }
+            return output.withUnsafeMutableBufferPointer { buffer in
+                analyze(base, raw.count, buffer.baseAddress!, buffer.count)
+            }
+        }
+        let response = output.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        guard result == 0 else {
+            throw ImportValidationError.metadata(response.isEmpty ? "Full-text analysis returned code \(result)." : response)
+        }
+        if response.hasPrefix("error|") {
+            throw ImportValidationError.metadata(String(response.dropFirst(6)))
         }
         return response
     }
@@ -968,6 +1015,16 @@ private struct ImportScreenView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(testingEncoder || disassemblingModules || rewritingModules)
+
+                        Button {
+                            Task { await analyzeMainModule() }
+                        } label: {
+                            Label("Analyze full main NSO", systemImage: "function")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(testingEncoder || disassemblingModules || rewritingModules)
                     }
                     if testingEncoder || disassemblingModules {
                         HStack(spacing: 10) {
@@ -1308,6 +1365,25 @@ private struct ImportScreenView: View {
             }.value
         } catch {
             encoderTestLog = "Encoder self-test failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func analyzeMainModule() async {
+        disassemblingModules = true
+        disassemblyLog = ""
+        defer { disassemblingModules = false }
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let mainModule = documents.appendingPathComponent("PreparedGame/RewrittenExeFS/main")
+        guard FileManager.default.fileExists(atPath: mainModule.path) else {
+            disassemblyLog = "Rewritten main NSO not found. Tap Rewrite NSO modules first."
+            return
+        }
+        do {
+            disassemblyLog = try await Task.detached(priority: .userInitiated) {
+                try GameExtractor.analyzeNSO(url: mainModule)
+            }.value
+        } catch {
+            disassemblyLog = "Full NSO analysis failed: \(error.localizedDescription)"
         }
     }
 
