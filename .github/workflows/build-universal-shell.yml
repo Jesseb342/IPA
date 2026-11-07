@@ -157,7 +157,8 @@ jobs:
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nsp'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_extract_game'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_extract_dlc'
-          nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nso'\n          nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_rewrite_nso'
+          nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nso'
+          nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_rewrite_nso'
 
           # The shell builder signs the app before this framework exists.
           # Sign the nested framework first, then re-sign the containing app.
