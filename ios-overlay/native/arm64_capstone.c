@@ -356,27 +356,28 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
             uint64_t raw_target = 0;
             for (size_t b = 0; b < 8; b++) raw_target |= (uint64_t)file[pointer_file_offset + b] << (b * 8);
             if (append_text(output, output_capacity, &used,
-                            "stub|type=adrp-ldr-add-br|slot_va=%08llx|slot_file_offset=%08llx|raw_pointer=%016llx\n",
+                            "stub|type=%sadrp-ldr-add-br|slot_va=%08llx|slot_file_offset=%08llx|raw_pointer=%016llx\n",
+                            stub_has_save_prologue ? "save-x16-x30+" : "",
                             (unsigned long long)slot_va, (unsigned long long)pointer_file_offset,
                             (unsigned long long)raw_target) != 0) {
                 cs_free(region, region_count); cs_close(&handle); return -2;
             }
             if (raw_target == 0) {
                 if (append_text(output, output_capacity, &used,
-                                "stub_target|resolution=null-or-unresolved\\n") != 0) {
+                                "stub_target|resolution=null-or-unresolved\n") != 0) {
                     cs_free(region, region_count); cs_close(&handle); return -2;
                 }
             } else {
                 uint32_t text_mem = read_le32(file + 0x14);
                 if (raw_target >= text_mem && raw_target - text_mem < text_size) {
                     if (append_text(output, output_capacity, &used,
-                                    "stub_target|text_offset=%08llx|resolution=static-pointer-in-text\\n",
+                                    "stub_target|text_offset=%08llx|resolution=static-pointer-in-text\n",
                                     (unsigned long long)(raw_target - text_mem)) != 0) {
                         cs_free(region, region_count); cs_close(&handle); return -2;
                     }
                 } else {
                     if (append_text(output, output_capacity, &used,
-                                    "stub_target|resolution=not-a-static-text-address\\n") != 0) {
+                                    "stub_target|resolution=not-a-static-text-address\n") != 0) {
                         cs_free(region, region_count); cs_close(&handle); return -2;
                     }
                 }
