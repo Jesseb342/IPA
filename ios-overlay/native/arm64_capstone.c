@@ -220,6 +220,254 @@ static int map_nso_va_to_file(const uint8_t *file, size_t file_size,
     return 0;
 }
 
+
+
+// Decode one address and identify either supported linker trampoline form.
+// The returned offset includes the optional x16/x30 save instruction.
+static int resolve_linker_stub_at(csh handle, const uint8_t *file, size_t file_size,
+                                  uint32_t text_file_offset, uint32_t text_size,
+                                  uint64_t offset, uint64_t *stub_start,
+                                  uint64_t *slot_va, uint64_t *raw_pointer,
+                                  size_t *slot_file_offset, int *has_save) {
+    if (offset >= text_size || (offset & 3u) != 0) return 0;
+    uint64_t decode_start = offset;
+    if (offset >= 4) {
+        cs_insn *prior = NULL;
+        size_t prior_count = cs_disasm(handle, file + text_file_offset + offset - 4,
+                                       text_size - (size_t)(offset - 4) < 4 ? text_size - (size_t)(offset - 4) : 4,
+                                       offset - 4, 1, &prior);
+        if (prior_count == 1 && strcmp(prior[0].mnemonic, "stp") == 0 &&
+            strstr(prior[0].op_str, "x16, x30, [sp, #-0x10]!") != NULL) {
+            *has_save = 1;
+            decode_start = offset - 4;
+        } else {
+            *has_save = 0;
+        }
+        if (prior) cs_free(prior, prior_count);
+    } else {
+        *has_save = 0;
+    }
+
+    size_t available = text_size - (size_t)decode_start;
+    if (available > 20) available = 20;
+    cs_insn *items = NULL;
+    size_t count = cs_disasm(handle, file + text_file_offset + decode_start,
+                             available, decode_start, 5, &items);
+    size_t first = *has_save ? 1 : 0;
+    int matched = count >= first + 4 &&
+        strcmp(items[first + 0].mnemonic, "adrp") == 0 &&
+        strcmp(items[first + 1].mnemonic, "ldr") == 0 &&
+        strcmp(items[first + 2].mnemonic, "add") == 0 &&
+        strcmp(items[first + 3].mnemonic, "br") == 0 &&
+        strstr(items[first + 0].op_str, "x16,") != NULL &&
+        strstr(items[first + 1].op_str, "x17, [x16") != NULL &&
+        strstr(items[first + 2].op_str, "x16, x16") != NULL &&
+        strstr(items[first + 3].op_str, "x17") != NULL;
+    uint64_t page = 0, delta = 0;
+    if (matched)
+        matched = parse_hash_immediate(items[first + 0].op_str, &page) &&
+                  parse_hash_immediate(items[first + 1].op_str, &delta);
+    if (matched) {
+        *stub_start = decode_start;
+        *slot_va = page + delta;
+        *slot_file_offset = 0;
+        *raw_pointer = 0;
+        if (map_nso_va_to_file(file, file_size, *slot_va, 8, slot_file_offset)) {
+            for (size_t b = 0; b < 8; b++)
+                *raw_pointer |= (uint64_t)file[*slot_file_offset + b] << (b * 8);
+        } else {
+            *slot_file_offset = SIZE_MAX;
+        }
+    }
+    if (items) cs_free(items, count);
+    return matched;
+}
+
+// Whole-main-text linker-stub discovery with bounded pointer-chain tracing.
+// It is read-only and deliberately labels zero/runtime pointers unresolved.
+NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t file_size,
+                                                    char *output, size_t output_capacity) {
+    if (!file || !output || output_capacity < 512) return -1;
+    output[0] = '\0';
+    if (file_size < 0x100 || memcmp(file, "NSO0", 4) != 0)
+        return snprintf(output, output_capacity, "error|Input is not a complete NSO file.") < (int)output_capacity ? 0 : -2;
+    uint32_t flags = read_le32(file + 0x0c);
+    uint32_t text_file_offset = read_le32(file + 0x10);
+    uint32_t text_size = read_le32(file + 0x18);
+    if ((flags & 0x81u) != 0)
+        return snprintf(output, output_capacity, "error|Main text segment is still compressed; rewrite the NSO first.") < (int)output_capacity ? 0 : -2;
+    if (!text_size || text_file_offset < 0x100 ||
+        (uint64_t)text_file_offset + text_size > file_size)
+        return snprintf(output, output_capacity, "error|NSO text segment bounds are invalid.") < (int)output_capacity ? 0 : -2;
+
+    csh handle;
+    cs_err err = cs_open(CS_ARCH_ARM64, CS_MODE_ARM, &handle);
+    if (err != CS_ERR_OK)
+        return snprintf(output, output_capacity, "error|Capstone initialization failed: %s", cs_strerror(err)) < (int)output_capacity ? 0 : -2;
+    cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
+    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
+
+    size_t used = 0;
+    uint64_t scanned_records = 0;
+    uint32_t stubs = 0, resolved = 0, unresolved = 0, chains = 0;
+    uint64_t last_stub = UINT64_MAX;
+    if (append_text(output, output_capacity, &used,
+                    "discovery|main-text linker-stub scan; static pointer chains are followed up to 8 levels; no code is modified.\\n") != 0) {
+        cs_close(&handle); return -2;
+    }
+
+    const size_t chunk_size = 0x10000;
+    for (size_t base = 0; base < text_size; base += chunk_size) {
+        size_t length = text_size - base;
+        if (length > chunk_size) length = chunk_size;
+        // A 16-byte overlap ensures a trampoline straddling a chunk boundary
+        // remains visible in full; duplicate starts are filtered below.
+        if (base + length < text_size && length >= 16) length = length;
+        cs_insn *items = NULL;
+        size_t count = cs_disasm(handle, file + text_file_offset + base, length,
+                                 (uint64_t)base, 0, &items);
+        scanned_records += count;
+        for (size_t i = 0; i + 3 < count; i++) {
+            if (strcmp(items[i].mnemonic, "adrp") != 0 ||
+                strcmp(items[i + 1].mnemonic, "ldr") != 0 ||
+                strcmp(items[i + 2].mnemonic, "add") != 0 ||
+                strcmp(items[i + 3].mnemonic, "br") != 0) continue;
+            uint64_t start = items[i].address;
+            uint64_t slot = 0, raw = 0;
+            size_t slot_file = SIZE_MAX;
+            int has_save = 0;
+            if (!resolve_linker_stub_at(handle, file, file_size, text_file_offset,
+                                        text_size, start, &start, &slot, &raw,
+                                        &slot_file, &has_save)) continue;
+            if (start == last_stub) continue;
+            last_stub = start;
+            if (stubs >= 512) continue;
+
+            if (append_text(output, output_capacity, &used,
+                            "stub|offset=%08llx|type=%sadrp-ldr-add-br|slot_va=%08llx|",
+                            (unsigned long long)start, has_save ? "save-x16-x30+" : "",
+                            (unsigned long long)slot) != 0) {
+                cs_free(items, count); cs_close(&handle); return -2;
+            }
+            if (slot_file == SIZE_MAX) {
+                if (append_text(output, output_capacity, &used, "resolution=slot-not-file-backed\\n") != 0) {
+                    cs_free(items, count); cs_close(&handle); return -2;
+                }
+                unresolved++;
+            } else {
+                if (append_text(output, output_capacity, &used,
+                                "slot_file_offset=%08llx|raw_pointer=%016llx\\n",
+                                (unsigned long long)slot_file, (unsigned long long)raw) != 0) {
+                    cs_free(items, count); cs_close(&handle); return -2;
+                }
+                if (raw == 0) {
+                    if (append_text(output, output_capacity, &used,
+                                    "resolution|stub=%08llx|null-or-unresolved\\n",
+                                    (unsigned long long)start) != 0) {
+                        cs_free(items, count); cs_close(&handle); return -2;
+                    }
+                    unresolved++;
+                } else {
+                    uint32_t text_mem = read_le32(file + 0x14);
+                    if (raw >= text_mem && raw - text_mem < text_size) {
+                        if (append_text(output, output_capacity, &used,
+                                        "resolution|stub=%08llx|text_offset=%08llx|static-pointer-in-text\\n",
+                                        (unsigned long long)start,
+                                        (unsigned long long)(raw - text_mem)) != 0) {
+                            cs_free(items, count); cs_close(&handle); return -2;
+                        }
+                        resolved++;
+                        uint64_t chain_from = start;
+                        uint64_t target_offset = raw - text_mem;
+                        uint64_t visited[8] = {0};
+                        size_t visited_count = 0;
+                        while (visited_count < 8) {
+                            int seen = 0;
+                            for (size_t v = 0; v < visited_count; v++)
+                                if (visited[v] == target_offset) seen = 1;
+                            if (seen) {
+                                if (append_text(output, output_capacity, &used,
+                                                "chain|from=%08llx|to=%08llx|cycle\\n",
+                                                (unsigned long long)chain_from,
+                                                (unsigned long long)target_offset) != 0) {
+                                    cs_free(items, count); cs_close(&handle); return -2;
+                                }
+                                break;
+                            }
+                            visited[visited_count++] = target_offset;
+                            uint64_t next_start = 0, next_slot = 0, next_raw = 0;
+                            size_t next_file = SIZE_MAX;
+                            int next_save = 0;
+                            if (!resolve_linker_stub_at(handle, file, file_size,
+                                                        text_file_offset, text_size,
+                                                        target_offset, &next_start,
+                                                        &next_slot, &next_raw,
+                                                        &next_file, &next_save)) {
+                                if (append_text(output, output_capacity, &used,
+                                                "chain|from=%08llx|to=%08llx|terminal=non-stub\\n",
+                                                (unsigned long long)chain_from,
+                                                (unsigned long long)target_offset) != 0) {
+                                    cs_free(items, count); cs_close(&handle); return -2;
+                                }
+                                break;
+                            }
+                            if (append_text(output, output_capacity, &used,
+                                            "chain|from=%08llx|to=%08llx|stub=%08llx|slot_va=%08llx|raw_pointer=%016llx\\n",
+                                            (unsigned long long)chain_from,
+                                            (unsigned long long)target_offset,
+                                            (unsigned long long)next_start,
+                                            (unsigned long long)next_slot,
+                                            (unsigned long long)next_raw) != 0) {
+                                cs_free(items, count); cs_close(&handle); return -2;
+                            }
+                            chains++;
+                            if (next_raw == 0) {
+                                if (append_text(output, output_capacity, &used,
+                                                "chain_resolution|stub=%08llx|null-or-unresolved\\n",
+                                                (unsigned long long)next_start) != 0) {
+                                    cs_free(items, count); cs_close(&handle); return -2;
+                                }
+                                unresolved++;
+                                break;
+                            }
+                            if (next_raw < text_mem || next_raw - text_mem >= text_size) {
+                                if (append_text(output, output_capacity, &used,
+                                                "chain_resolution|stub=%08llx|not-a-static-text-address\\n",
+                                                (unsigned long long)next_start) != 0) {
+                                    cs_free(items, count); cs_close(&handle); return -2;
+                                }
+                                unresolved++;
+                                break;
+                            }
+                            chain_from = next_start;
+                            target_offset = next_raw - text_mem;
+                        }
+                    } else {
+                        if (append_text(output, output_capacity, &used,
+                                        "resolution|stub=%08llx|not-a-static-text-address\\n",
+                                        (unsigned long long)start) != 0) {
+                            cs_free(items, count); cs_close(&handle); return -2;
+                        }
+                        unresolved++;
+                    }
+                }
+            }
+            stubs++;
+        }
+        cs_free(items, count);
+        if (used + 2048 >= output_capacity) {
+            cs_close(&handle);
+            return append_text(output, output_capacity, &used,
+                               "warning|Output limit reached; increase output capacity or reduce report limit.\\n") == 0 ? 0 : -2;
+        }
+    }
+    int result = append_text(output, output_capacity, &used,
+        "summary|text_bytes=%u|decoded_records=%llu|linker_stubs=%u|static_text_targets=%u|unresolved=%u|traced_chain_edges=%u\\n",
+        text_size, (unsigned long long)scanned_records, stubs, resolved, unresolved, chains);
+    cs_close(&handle);
+    return result == 0 ? 0 : -2;
+}
+
 // Inspect a selected NSO text-relative address. A bounded control-flow walk
 // estimates the reachable function body; direct calls, tail branches, and
 // linker-style indirect jump stubs are reported separately. Read-only.
