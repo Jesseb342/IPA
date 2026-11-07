@@ -34,7 +34,7 @@ replacements = [
         '        [self presentViewController:a animated:YES completion:nil];\n'
         '    }\n'
         '    if (self.launched || !front_ios_boot_ok()) return;\n',
-        '    if (!front_ios_boot_ok()) {\n'
+        '    if (dm_shell_library_needed() || !front_ios_boot_ok()) {\n'
         '        if (!self.importScreenShown && !self.presentedViewController) {\n'
         '            self.importScreenShown = YES;\n'
         '            dm_show_import_screen((__bridge void *)self);\n'
