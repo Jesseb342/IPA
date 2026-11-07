@@ -876,7 +876,17 @@ private struct ImportScreenView: View {
             switch kind {
             case .base:
                 if let previous = base { deleteStoredFile(previous) }
+                if let previous = update { deleteStoredFile(previous) }
+                dlc.forEach(deleteStoredFile)
                 base = imported.first
+                update = nil
+                dlc = []
+                noUpdateSelected = false
+                dlcSelectionFinished = false
+                defaults.set(false, forKey: "nxn.import.noUpdate")
+                defaults.set(false, forKey: "nxn.import.dlcFinished")
+                defaults.removeObject(forKey: "nxn.import.update")
+                defaults.removeObject(forKey: "nxn.import.dlc")
                 defaults.set(base.flatMap { try? JSONEncoder().encode($0) }, forKey: "nxn.import.base")
             case .keys:
                 if let previous = keys { deleteStoredFile(previous) }
