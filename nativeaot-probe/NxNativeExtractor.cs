@@ -274,7 +274,7 @@ public static unsafe class NxNativeExtractor {
                 }
             }
             if (inspected == 0) return WriteOutput(outputPointer, outputCapacity, "error|No NSO or NRO modules were found in ExeFS.");
-            report.Insert(0, $"summary|{inspected} module(s) inspected; headers and segment layouts validated. Decompression, SHA-256 verification, and rewriting are not included yet.\n");
+            report.Insert(0, $"summary|{inspected} module(s) inspected; headers and segment layouts validated; supported NSO segments decompressed and SHA-256 verified. Rewriting is not included yet.\n");
             return WriteOutput(outputPointer, outputCapacity, report.ToString());
         }
         catch (Exception e)
