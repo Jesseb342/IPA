@@ -352,7 +352,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
             if (!resolve_linker_stub_at(handle, file, file_size, text_file_offset,
                                         text_size, start, &start, &slot, &raw,
                                         &slot_file, &has_save)) continue;
-            if (start == last_stub) continue;
+            if (last_stub != UINT64_MAX && start <= last_stub) continue;
             last_stub = start;
             if (stubs >= 512) continue;
 
