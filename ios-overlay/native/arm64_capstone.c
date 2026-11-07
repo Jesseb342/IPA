@@ -323,6 +323,8 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
     size_t used = 0;
     uint64_t scanned_records = 0;
     uint32_t stubs = 0, resolved = 0, unresolved = 0, chains = 0;
+    uint64_t discovered_offsets[512] = {0};
+    uint32_t caller_counts[512] = {0}, caller_reported[512] = {0};
     uint64_t last_stub = UINT64_MAX;
     if (append_text(output, output_capacity, &used,
                     "discovery|main-text linker-stub scan; static pointer chains are followed up to 8 levels; no code is modified.\\n") != 0) {
@@ -478,6 +480,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                     }
                 }
             }
+            discovered_offsets[stubs] = start;
             stubs++;
         }
         cs_free(items, count);
@@ -487,6 +490,48 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                                "warning|Output limit reached; increase output capacity or reduce report limit.\\n") == 0 ? 0 : -2;
         }
     }
+    // Second pass: map direct BL call sites back to discovered stubs. The
+    // stub offsets are sorted by the first scan, so each lookup is logarithmic.
+    for (size_t base = 0; base < text_size; base += chunk_size) {
+        size_t length = text_size - base;
+        if (length > chunk_size) length = chunk_size;
+        cs_insn *items = NULL;
+        size_t count = cs_disasm(handle, file + text_file_offset + base, length,
+                                 (uint64_t)base, 0, &items);
+        for (size_t i = 0; i < count; i++) {
+            if (strcmp(items[i].mnemonic, "bl") != 0) continue;
+            uint64_t target = 0;
+            if (!parse_hash_immediate(items[i].op_str, &target)) continue;
+            size_t low = 0, high = stubs;
+            while (low < high) {
+                size_t mid = low + (high - low) / 2;
+                if (discovered_offsets[mid] < target) low = mid + 1;
+                else high = mid;
+            }
+            if (low < stubs && discovered_offsets[low] == target) {
+                caller_counts[low]++;
+                if (caller_reported[low] < 8) {
+                    if (append_text(output, output_capacity, &used,
+                                    "caller|stub=%08llx|site=%08llx\n",
+                                    (unsigned long long)target,
+                                    (unsigned long long)items[i].address) != 0) {
+                        cs_free(items, count); cs_close(&handle); return -2;
+                    }
+                    caller_reported[low]++;
+                }
+            }
+        }
+        cs_free(items, count);
+    }
+    for (uint32_t i = 0; i < stubs; i++) {
+        if (append_text(output, output_capacity, &used,
+                        "caller_summary|stub=%08llx|direct_callers=%u|listed=%u|limit=8\n",
+                        (unsigned long long)discovered_offsets[i],
+                        caller_counts[i], caller_reported[i]) != 0) {
+            cs_close(&handle); return -2;
+        }
+    }
+
     int result = append_text(output, output_capacity, &used,
         "summary|text_bytes=%u|decoded_records=%llu|linker_stubs=%u|static_text_targets=%u|unresolved=%u|traced_chain_edges=%u\\n",
         text_size, (unsigned long long)scanned_records, stubs, resolved, unresolved, chains);
