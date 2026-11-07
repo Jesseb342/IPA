@@ -111,7 +111,7 @@ private enum GameExtractor {
                     .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
                 guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
                     let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
-                    throw ImportValidationError.metadata("Could not load the NSO inspection engine: \\(detail)")
+                    throw ImportValidationError.metadata("Could not load the NSO inspection engine: \(detail)")
                 }
                 frameworkHandle = loaded
                 handle = loaded
@@ -1075,7 +1075,7 @@ private struct ImportScreenView: View {
             status = "NSO inspection complete. No module bytes were modified."
         } catch {
             inspectionLog = error.localizedDescription
-            status = "NSO inspection failed: \\(error.localizedDescription)"
+            status = "NSO inspection failed: \(error.localizedDescription)"
         }
         inspectingModules = false
     }
