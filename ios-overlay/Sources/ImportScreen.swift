@@ -1025,10 +1025,10 @@ private struct ImportScreenView: View {
         let updateURL = updateSnapshot.map { storedURL(for: $0) }
         let dlcURLs = dlcSnapshot.map { storedURL(for: $0) }
         let checked = await Task.detached(priority: .userInitiated) {
-            func checkedFile(_ item: ImportedGameFile?, url: URL?, kind: ImportKind) -> ImportedGameFile? {
+            func checkedFile(_ item: ImportedGameFile?, url: URL?, kind: ImportKind, baseTitleID: String? = nil) -> ImportedGameFile? {
                 guard var item, let url else { return nil }
                 do {
-                    item.validationStatus = try ImportFileStorage.inspectContent(url, keysURL: keyURL, kind: kind)
+                    item.validationStatus = try ImportFileStorage.inspectContent(url, keysURL: keyURL, kind: kind, baseTitleID: baseTitleID)
                 } catch {
                     item.validationStatus = error.localizedDescription
                 }
@@ -1037,13 +1037,7 @@ private struct ImportScreenView: View {
             let checkedBase = checkedFile(baseSnapshot, url: baseURL, kind: .base)
             let checkedUpdate = checkedFile(updateSnapshot, url: updateURL, kind: .update)
             let checkedDLC = dlcSnapshot.enumerated().map { index, item -> ImportedGameFile in
-                guard var checked = checkedFile(item, url: dlcURLs[index], kind: .dlc) else { return item }
-                do {
-                    checked.validationStatus = try ImportFileStorage.inspectContent(dlcURLs[index], keysURL: keyURL, kind: .dlc, baseTitleID: checkedBase?.contentTitleID)
-                } catch {
-                    checked.validationStatus = error.localizedDescription
-                }
-                return checked
+                checkedFile(item, url: dlcURLs[index], kind: .dlc, baseTitleID: checkedBase?.contentTitleID) ?? item
             }
             return (checkedBase, checkedUpdate, checkedDLC)
         }.value
