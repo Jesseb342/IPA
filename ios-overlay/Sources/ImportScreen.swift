@@ -162,6 +162,47 @@ private enum GameExtractor {
         return response
     }
 
+    static func inspectFunction(url: URL, textOffset: UInt64) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if arm64InspectFunction == nil {
+            let binary = Bundle.main.bundleURL
+                .appendingPathComponent("Frameworks/NxNativeArm64.framework/NxNativeArm64")
+            guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                throw ImportValidationError.metadata("Could not load Capstone function inspector: \\(detail)")
+            }
+            arm64FrameworkHandle = loaded
+            guard let symbol = dlsym(loaded, "nxn_arm64_inspect_function") else {
+                throw ImportValidationError.metadata("Capstone's function inspector is missing.")
+            }
+            arm64InspectFunction = unsafeBitCast(symbol, to: Arm64InspectFunction.self)
+        }
+
+        guard let inspect = arm64InspectFunction else {
+            throw ImportValidationError.metadata("Capstone function inspection could not be initialized.")
+        }
+        let data: Data
+        do { data = try Data(contentsOf: url, options: .mappedIfSafe) }
+        catch { throw ImportValidationError.metadata("Could not read rewritten NSO: \\(error.localizedDescription)") }
+        var output = [CChar](repeating: 0, count: 256 * 1024)
+        let result = data.withUnsafeBytes { raw in
+            guard let base = raw.baseAddress else { return Int32(-1) }
+            return output.withUnsafeMutableBufferPointer { buffer in
+                inspect(base, raw.count, textOffset, buffer.baseAddress!, buffer.count)
+            }
+        }
+        let response = output.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        guard result == 0 else {
+            throw ImportValidationError.metadata(response.isEmpty ? "Function inspection returned code \\(result)." : response)
+        }
+        if response.hasPrefix("error|") {
+            throw ImportValidationError.metadata(String(response.dropFirst(6)))
+        }
+        return response
+    }
+
     static func analyzeNSO(url: URL) throws -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -1025,6 +1066,25 @@ private struct ImportScreenView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(testingEncoder || disassemblingModules || rewritingModules)
+
+                        HStack(spacing: 8) {
+                            Text("Text offset")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextField("Hex offset", text: $functionOffset)
+                                .font(.system(.body, design: .monospaced))
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .textFieldStyle(.roundedBorder)
+                                .frame(maxWidth: 150)
+                            Button {
+                                Task { await inspectSelectedFunction() }
+                            } label: {
+                                Label("Inspect function", systemImage: "scope")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(testingEncoder || disassemblingModules || rewritingModules)
+                        }
                     }
                     if testingEncoder || disassemblingModules {
                         HStack(spacing: 10) {
@@ -1384,6 +1444,32 @@ private struct ImportScreenView: View {
             }.value
         } catch {
             disassemblyLog = "Full NSO analysis failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func inspectSelectedFunction() async {
+        let cleaned = functionOffset.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "0x", with: "")
+            .replacingOccurrences(of: "0X", with: "")
+        guard let offset = UInt64(cleaned, radix: 16) else {
+            disassemblyLog = "Enter a valid hexadecimal text offset, for example 00000038."
+            return
+        }
+        disassemblingModules = true
+        disassemblyLog = ""
+        defer { disassemblingModules = false }
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let mainModule = documents.appendingPathComponent("PreparedGame/RewrittenExeFS/main")
+        guard FileManager.default.fileExists(atPath: mainModule.path) else {
+            disassemblyLog = "Rewritten main NSO not found. Tap Rewrite NSO modules first."
+            return
+        }
+        do {
+            disassemblyLog = try await Task.detached(priority: .userInitiated) {
+                try GameExtractor.inspectFunction(url: mainModule, textOffset: offset)
+            }.value
+        } catch {
+            disassemblyLog = "Function inspection failed: \\(error.localizedDescription)"
         }
     }
 
