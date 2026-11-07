@@ -424,6 +424,19 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                                 }
                                 break;
                             }
+                            if (next_file == SIZE_MAX) {
+                                if (append_text(output, output_capacity, &used,
+                                                "chain|from=%08llx|to=%08llx|stub=%08llx|slot_va=%08llx|resolution=slot-not-file-backed\\n",
+                                                (unsigned long long)chain_from,
+                                                (unsigned long long)target_offset,
+                                                (unsigned long long)next_start,
+                                                (unsigned long long)next_slot) != 0) {
+                                    cs_free(items, count); cs_close(&handle); return -2;
+                                }
+                                unresolved++;
+                                chains++;
+                                break;
+                            }
                             if (append_text(output, output_capacity, &used,
                                             "chain|from=%08llx|to=%08llx|stub=%08llx|slot_va=%08llx|raw_pointer=%016llx\\n",
                                             (unsigned long long)chain_from,
