@@ -103,6 +103,69 @@ public static unsafe class NxNativeExtractor {
         }
     }
 
+    // C ABI: int nxn_extract_dlc(keys, dlcNsp, outputImagePath, dlcTitleIdHex, output, capacity)
+    // Extracts one DLC title's RomFS as the DMROMFS1 image mounted from Documents/aoc/<index>.img.
+    [UnmanagedCallersOnly(EntryPoint = "nxn_extract_dlc", CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static int ExtractDlc(byte* keysPointer, byte* nspPointer, byte* imagePathPointer,
+                                 byte* titleIdPointer, byte* outputPointer, int outputCapacity)
+    {
+        if (keysPointer == null || nspPointer == null || imagePathPointer == null ||
+            titleIdPointer == null || outputPointer == null || outputCapacity <= 1) return -1;
+
+        lock (ExtractLock)
+        {
+            string keysPath = Marshal.PtrToStringUTF8((IntPtr)keysPointer);
+            string nspPath = Marshal.PtrToStringUTF8((IntPtr)nspPointer);
+            string imagePath = Marshal.PtrToStringUTF8((IntPtr)imagePathPointer);
+            string titleIdText = Marshal.PtrToStringUTF8((IntPtr)titleIdPointer);
+            if (string.IsNullOrWhiteSpace(keysPath) || string.IsNullOrWhiteSpace(nspPath) ||
+                string.IsNullOrWhiteSpace(imagePath) || string.IsNullOrWhiteSpace(titleIdText))
+                return WriteOutput(outputPointer, outputCapacity, "error|Missing DLC extraction path or title ID.");
+
+            TextWriter originalOutput = Console.Out;
+            using var capture = new StringWriter();
+            try
+            {
+                Console.SetOut(capture);
+                g_damaged.Clear();
+                g_allow = false;
+                g_lenient = null;
+                g_lenientFs = null;
+
+                int exitCode;
+                try
+                {
+                    ulong titleId = Convert.ToUInt64(titleIdText, 16);
+                    KeySet keySet = ExternalKeyReader.ReadKeyFile(keysPath);
+                    exitCode = Aoc(keySet, nspPath, imagePath, true, titleId);
+                }
+                catch (KeysMissing e)
+                {
+                    Console.WriteLine("[RED] " + e.Message);
+                    exitCode = 6;
+                }
+                catch (HorizonResultException e) when (HashError(e))
+                {
+                    Console.WriteLine("[RED] the DLC package is damaged: filesystem tables failed their integrity check.");
+                    exitCode = 3;
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("[RED] " + (e.Message ?? e.GetType().Name).Replace("\\r", " ").Replace("\\n", " "));
+                    exitCode = 1;
+                }
+
+                string log = capture.ToString();
+                int writeResult = WriteOutput(outputPointer, outputCapacity, log);
+                return writeResult < 0 ? writeResult : exitCode;
+            }
+            finally
+            {
+                Console.SetOut(originalOutput);
+            }
+        }
+    }
+
     private static int WriteOutput(byte* destination, int capacity, string value)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(value);
