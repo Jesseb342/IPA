@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          brew install xcodegen
+          brew install xcodegen cmake
           python3 -m pip install --quiet --break-system-packages fonttools \
             || python3 -m pip install --quiet fonttools
           python3 -c "import fontTools; print('fontTools', fontTools.version)"
@@ -54,6 +54,56 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
+
+      - name: Build Capstone 5 ARM64 disassembler for iOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          CAPSTONE_SRC="$RUNNER_TEMP/capstone-5.0.6"
+          CAPSTONE_BUILD="$RUNNER_TEMP/capstone-5.0.6-ios"
+          FRAMEWORK="$RUNNER_TEMP/NxNativeArm64.framework"
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          git clone --depth 1 --branch 5.0.6 https://github.com/capstone-engine/capstone.git "$CAPSTONE_SRC"
+          cmake -S "$CAPSTONE_SRC" -B "$CAPSTONE_BUILD" -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DCAPSTONE_ARCHITECTURE_DEFAULT=OFF \
+            -DCAPSTONE_ARM64_SUPPORT=ON \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DBUILD_STATIC_LIBS=ON \
+            -DCAPSTONE_BUILD_TESTS=OFF \
+            -DCAPSTONE_BUILD_CSTOOL=OFF \
+            -DCAPSTONE_BUILD_CSTEST=OFF \
+            -DCAPSTONE_INSTALL=OFF
+          cmake --build "$CAPSTONE_BUILD" --config Release --target capstone_static
+          STATIC_LIB="$(find "$CAPSTONE_BUILD" -name libcapstone.a -print -quit)"
+          test -s "$STATIC_LIB"
+          mkdir -p "$FRAMEWORK"
+          clang -arch arm64 -isysroot "$SDK" -miphoneos-version-min=15.0 \
+            -O2 -fvisibility=hidden -dynamiclib \
+            -I "$CAPSTONE_SRC/include" \
+            ipa-overlay/ios-overlay/native/arm64_capstone.c "$STATIC_LIB" \
+            -Wl,-install_name,@rpath/NxNativeArm64.framework/NxNativeArm64 \
+            -Wl,-dead_strip -o "$FRAMEWORK/NxNativeArm64"
+          cp "$CAPSTONE_SRC/LICENSE.TXT" "$FRAMEWORK/Capstone-LICENSE.txt"
+          cat > "$FRAMEWORK/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>NxNativeArm64</string>
+            <key>CFBundleIdentifier</key><string>org.nxnative.arm64</string>
+            <key>CFBundleName</key><string>NxNativeArm64</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+            <key>CFBundleVersion</key><string>1</string>
+          </dict>
+          </plist>
+          PLIST
+          nm -gU "$FRAMEWORK/NxNativeArm64" | grep -q '_nxn_arm64_disassemble_nso'
+          echo "Capstone 5 ARM64 framework built for iOS:"
+          ls -lh "$FRAMEWORK/NxNativeArm64"
 
       - name: Build isolated LibHac NativeAOT metadata probe
         id: metadata_probe
@@ -154,14 +204,20 @@ jobs:
           cp -R "$RUNNER_TEMP/NxNativeMetadataProbe.framework" "$FRAMEWORK"
           test -s "$FRAMEWORK/NxNativeMetadataProbe"
           test -s "$FRAMEWORK/Info.plist"
+          nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_arm64_encoder_selftest'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nsp'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_extract_game'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_extract_dlc'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nso'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_rewrite_nso'
 
-          # The shell builder signs the app before this framework exists.
-          # Sign the nested framework first, then re-sign the containing app.
+          ARM64_FRAMEWORK="$FRAMEWORKS/NxNativeArm64.framework"
+          cp -R "$RUNNER_TEMP/NxNativeArm64.framework" "$ARM64_FRAMEWORK"
+          test -s "$ARM64_FRAMEWORK/NxNativeArm64"
+          nm -gU "$ARM64_FRAMEWORK/NxNativeArm64" | grep -q '_nxn_arm64_disassemble_nso'
+
+          # Sign both nested frameworks before re-signing the containing app.
+          codesign --force --sign - --timestamp=none "$ARM64_FRAMEWORK"
           codesign --force --sign - --timestamp=none "$FRAMEWORK"
           codesign --force --sign - --timestamp=none \
             --entitlements dm/ios/DmIOS.entitlements "$APP"
@@ -213,7 +269,7 @@ jobs:
 
           binary = pathlib.Path(sys.argv[1])
           data = binary.read_bytes()
-          required = (b"ImportScreenView", b"_dm_show_import_screen", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso")
+          required = (b"ImportScreenView", b"_dm_show_import_screen", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso")
           missing = [item.decode() for item in required if item not in data]
           if missing:
               print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
@@ -247,7 +303,7 @@ jobs:
             echo "::error::The LibHac metadata framework is missing from the app."
             exit 1
           }
-          if find "$APP/Frameworks" -mindepth 1 -maxdepth 1 ! -name 'NxNativeMetadataProbe.framework' | grep -q .; then
+          if find "$APP/Frameworks" -mindepth 1 -maxdepth 1 ! -name 'NxNativeMetadataProbe.framework' ! -name 'NxNativeArm64.framework' | grep -q .; then
             echo "::error::Unexpected framework or game module found in the shell."
             exit 1
           fi
