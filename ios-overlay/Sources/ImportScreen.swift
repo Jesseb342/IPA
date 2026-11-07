@@ -121,6 +121,12 @@ private enum GameExtractor {
 
     private static var arm64AnalyzeFunction: Arm64AnalyzeFunction?
 
+    typealias Arm64InspectFunction = @convention(c) (
+        UnsafeRawPointer, Int, UInt64, UnsafeMutablePointer<CChar>, Int
+    ) -> Int32
+
+    private static var arm64InspectFunction: Arm64InspectFunction?
+
     private static var arm64FrameworkHandle: UnsafeMutableRawPointer?
     private static var arm64DisassembleFunction: Arm64DisassembleFunction?
 
@@ -846,6 +852,7 @@ private struct ImportScreenView: View {
     @State private var encoderTestLog = ""
     @State private var disassemblingModules = false
     @State private var disassemblyLog = ""
+    @State private var functionOffset = "00000038"
     @State private var extractionLog = ""
     @State private var status = ""
     @State private var noUpdateSelected = false
