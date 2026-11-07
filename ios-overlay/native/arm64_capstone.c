@@ -48,6 +48,10 @@ NXN_EXPORT int32_t nxn_arm64_disassemble_nso(const uint8_t *file, size_t file_si
     if (err != CS_ERR_OK)
         return snprintf(output, output_capacity, "error|Capstone initialization failed: %s", cs_strerror(err)) < (int)output_capacity ? 0 : -2;
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
+    // NSO text can begin with a MOD0 header, padding, or literal data before
+    // executable instructions. Continue decoding after such bytes instead of
+    // silently stopping at the first invalid word.
+    cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
     cs_insn *instructions = NULL;
     size_t count = cs_disasm(handle, file + text_offset, text_size, 0, max_instructions, &instructions);
     if (count == 0) {
@@ -57,7 +61,7 @@ NXN_EXPORT int32_t nxn_arm64_disassemble_nso(const uint8_t *file, size_t file_si
 
     size_t used = 0;
     if (append_text(output, output_capacity, &used,
-                    "summary|Capstone 5 AArch64 disassembly; %zu instruction(s) decoded from main text (showing up to %u).\n",
+                    "summary|Capstone 5 AArch64 scan; %zu instruction/data record(s) from main text (showing up to %u). Data bytes are marked .byte; offsets are relative to the NSO text segment.\n",
                     count, max_instructions) != 0) {
         cs_free(instructions, count); cs_close(&handle); return -2;
     }
@@ -67,8 +71,8 @@ NXN_EXPORT int32_t nxn_arm64_disassemble_nso(const uint8_t *file, size_t file_si
         size_t at = 0;
         for (uint8_t j = 0; j < insn->size && at + 3 < sizeof(bytes); j++)
             at += (size_t)snprintf(bytes + at, sizeof(bytes) - at, "%02x", insn->bytes[j]);
-        if (append_text(output, output_capacity, &used, "insn|%08llx|%s|%s|%s\n",
-                        (unsigned long long)insn->address, bytes, insn->mnemonic, insn->op_str) != 0) {
+        if (append_text(output, output_capacity, &used, "%s|%08llx|%s|%s|%s\n",
+                        insn->id == 0 ? "data" : "insn", (unsigned long long)insn->address, bytes, insn->mnemonic, insn->op_str) != 0) {
             cs_free(instructions, count); cs_close(&handle); return -2;
         }
     }
