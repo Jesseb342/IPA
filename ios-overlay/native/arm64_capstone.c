@@ -235,6 +235,14 @@ NXN_EXPORT int32_t nxn_arm64_inspect_function(const uint8_t *file, size_t file_s
         if (append_text(output, output_capacity, &used, "insn|%08llx|%s|%s\n",
                         (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
             cs_free(region, region_count); cs_close(&handle); return -2;
+        if (strcmp(insn->mnemonic, "bl") == 0) {
+            const char *hash = strchr(insn->op_str, '#');
+            if (hash && append_text(output, output_capacity, &used, "callee|%08llx|%08llx\\n",
+                                    (unsigned long long)insn->address,
+                                    strtoull(hash + 1, NULL, 0)) != 0) {
+                cs_free(region, region_count); cs_close(&handle); return -2;
+            }
+        }
         }
     }
     cs_free(region, region_count);
