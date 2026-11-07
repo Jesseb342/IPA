@@ -235,7 +235,7 @@ jobs:
           test -s "$ARM64_FRAMEWORK/NxNativeArm64"
           nm -gU "$ARM64_FRAMEWORK/NxNativeArm64" | grep -q '_nxn_arm64_disassemble_nso'
           nm -gU "$ARM64_FRAMEWORK/NxNativeArm64" | grep -q '_nxn_arm64_analyze_nso'
-nm -gU "$ARM64_FRAMEWORK/NxNativeArm64" | grep -q '_nxn_arm64_inspect_function'
+          nm -gU "$ARM64_FRAMEWORK/NxNativeArm64" | grep -q '_nxn_arm64_inspect_function'
 
           # Sign both nested frameworks before re-signing the containing app.
           codesign --force --sign - --timestamp=none "$ARM64_FRAMEWORK"
