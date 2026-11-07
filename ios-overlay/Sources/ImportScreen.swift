@@ -98,6 +98,61 @@ private enum GameExtractor {
 
     private static var inspectNsoFunction: InspectNsoFunction?
 
+    typealias RewriteNsoFunction = @convention(c) (
+        UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>,
+        UnsafeMutablePointer<CChar>, Int32
+    ) -> Int32
+
+    private static var rewriteNsoFunction: RewriteNsoFunction?
+
+    static func rewriteNSOModules(exefsURL: URL, outputURL: URL) throws -> String {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if rewriteNsoFunction == nil {
+            let handle: UnsafeMutableRawPointer
+            if let existing = frameworkHandle {
+                handle = existing
+            } else {
+                let binary = Bundle.main.bundleURL
+                    .appendingPathComponent("Frameworks/NxNativeMetadataProbe.framework/NxNativeMetadataProbe")
+                guard let loaded = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+                    let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+                    throw ImportValidationError.metadata("Could not load the NSO rewrite engine: \\(detail)")
+                }
+                frameworkHandle = loaded
+                handle = loaded
+            }
+            guard let symbol = dlsym(handle, "nxn_rewrite_nso") else {
+                throw ImportValidationError.metadata("The NSO rewrite function is missing.")
+            }
+            rewriteNsoFunction = unsafeBitCast(symbol, to: RewriteNsoFunction.self)
+        }
+
+        guard let rewrite = rewriteNsoFunction else {
+            throw ImportValidationError.metadata("The NSO rewrite function could not be initialized.")
+        }
+        var output = [CChar](repeating: 0, count: 256 * 1024)
+        let emptyManifest = ""
+        let result = exefsURL.path.withCString { inputPath in
+            outputURL.path.withCString { outputPath in
+                emptyManifest.withCString { manifestPath in
+                    output.withUnsafeMutableBufferPointer { buffer in
+                        rewrite(inputPath, outputPath, manifestPath, buffer.baseAddress!, Int32(buffer.count))
+                    }
+                }
+            }
+        }
+        let response = output.withUnsafeBufferPointer { buffer in String(cString: buffer.baseAddress!) }
+        guard result >= 0 else {
+            throw ImportValidationError.metadata("NSO rewrite output exceeded its safety limit.")
+        }
+        if response.hasPrefix("error|") {
+            throw ImportValidationError.metadata(String(response.dropFirst(6)))
+        }
+        return response
+    }
+
     static func inspectNSOModules(exefsURL: URL) throws -> String {
         lock.lock()
         defer { lock.unlock() }
@@ -605,6 +660,8 @@ private struct ImportScreenView: View {
     @State private var inspectingModules = false
     @State private var gameExtracted = false
     @State private var inspectionLog = ""
+    @State private var rewritingModules = false
+    @State private var rewriteLog = ""
     @State private var extractionLog = ""
     @State private var status = ""
     @State private var noUpdateSelected = false
@@ -766,6 +823,30 @@ private struct ImportScreenView: View {
                     }
                     if !inspectionLog.isEmpty {
                         Text(inspectionLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    if gameExtracted {
+                        Button {
+                            Task { await rewriteGameModules() }
+                        } label: {
+                            Label("Rewrite NSO modules", systemImage: "wrench.and.screwdriver")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(extracting || inspectingModules || rewritingModules)
+                    }
+                    if rewritingModules {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Rebuilding NSO modules. Keep the app open…").foregroundStyle(.secondary)
+                        }
+                    }
+                    if !rewriteLog.isEmpty {
+                        Text(rewriteLog)
                             .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
@@ -1059,6 +1140,25 @@ private struct ImportScreenView: View {
         extracting = false
     }
 
+
+    private func rewriteGameModules() async {
+        guard gameExtracted else { return }
+        rewritingModules = true
+        rewriteLog = ""
+        defer { rewritingModules = false }
+
+        let prepared = documentsDirectory.appendingPathComponent("PreparedGame", isDirectory: true)
+        let exefs = prepared.appendingPathComponent("ExeFS", isDirectory: true)
+        let rewritten = prepared.appendingPathComponent("RewrittenExeFS", isDirectory: true)
+        do {
+            let report = try await Task.detached(priority: .userInitiated) {
+                try GameExtractor.rewriteNSOModules(exefsURL: exefs, outputURL: rewritten)
+            }.value
+            rewriteLog = report + "\\nOutput: Documents/PreparedGame/RewrittenExeFS\\nOriginal ExeFS was left unchanged. No game-specific patches were applied in this test."
+        } catch {
+            rewriteLog = "Rewrite failed: \\(error.localizedDescription)"
+        }
+    }
 
     private func inspectGameModules() async {
         guard gameExtracted else { return }
