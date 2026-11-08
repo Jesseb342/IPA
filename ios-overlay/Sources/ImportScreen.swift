@@ -151,16 +151,30 @@ private enum ExtractionManifest {
         return manifestURL
     }
 
-    static func combinedReport(preparedDirectory: URL, scanReport: String) -> String {
+    static func combinedReport(
+        preparedDirectory: URL,
+        extractionLog: String,
+        scanReport: String
+    ) -> String {
         let manifestURL = preparedDirectory.appendingPathComponent("extraction-manifest.txt")
-        var manifest = (try? String(contentsOf: manifestURL, encoding: .utf8)) ?? "manifest|missing"
+        var manifest = (try? String(contentsOf: manifestURL, encoding: .utf8))
+            ?? "manifest_status|missing\nmanifest_path|\(manifestURL.lastPathComponent)\n"
+        if !manifest.hasSuffix("\n") { manifest += "\n" }
         manifest += "scan_status|completed\n"
         manifest += "scan_module|RewrittenExeFS/main\n"
         if let summary = scanReport.split(separator: "\n").first(where: { $0.hasPrefix("summary|") }) {
             manifest += "scan_summary|\(summary)\n"
         }
         try? manifest.write(to: manifestURL, atomically: true, encoding: .utf8)
-        return manifest + "\n--- MAIN NSO ANALYSIS ---\n" + scanReport
+
+        let extractionSection = extractionLog.isEmpty
+            ? "No separate extraction log was captured.\n"
+            : extractionLog + "\n"
+        return manifest
+            + "\n--- EXTRACTION DETAILS ---\n"
+            + extractionSection
+            + "\n--- MAIN NSO ANALYSIS ---\n"
+            + scanReport
     }
 }
 
@@ -1627,7 +1641,11 @@ private struct ImportScreenView: View {
                 try GameExtractor.analyzeNSO(url: mainModule)
             }.value
             let prepared = documents.appendingPathComponent("PreparedGame", isDirectory: true)
-            disassemblyLog = ExtractionManifest.combinedReport(preparedDirectory: prepared, scanReport: scanReport)
+            disassemblyLog = ExtractionManifest.combinedReport(
+                preparedDirectory: prepared,
+                extractionLog: extractionLog,
+                scanReport: scanReport
+            )
         } catch {
             disassemblyLog = "Full NSO analysis failed: \(error.localizedDescription)"
         }
