@@ -435,7 +435,8 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                                                 (unsigned long long)next_slot) != 0) {
                                     cs_free(items, count); cs_close(&handle); return -2;
                                 }
-                                unresolved++;
+                                // Count each unresolved stub once in the main scan.
+                                // Multiple incoming chains must not inflate this total.
                                 chains++;
                                 break;
                             }
@@ -455,7 +456,8 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                                                 (unsigned long long)next_start) != 0) {
                                     cs_free(items, count); cs_close(&handle); return -2;
                                 }
-                                unresolved++;
+                                // This terminal stub is counted once in the main scan;
+                                // repeated chains must not inflate the unresolved-stub total.
                                 break;
                             }
                             if (next_raw < text_mem || next_raw - text_mem >= text_size) {
@@ -464,7 +466,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                                                 (unsigned long long)next_start) != 0) {
                                     cs_free(items, count); cs_close(&handle); return -2;
                                 }
-                                unresolved++;
+                                // Count unresolved stub records, not every chain that reaches one.
                                 break;
                             }
                             chain_from = next_start;
