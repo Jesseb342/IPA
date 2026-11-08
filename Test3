@@ -1,0 +1,300 @@
+analysis|Full main-text scan; offsets are relative to NSO text. This is heuristic discovery, not an automatic patch plan.
+pattern_sample|pc_relative_address|00000008|adr x13, #0x889f1
+prologue|00000038|fd7b08a9|x29, x30, [sp, #0x80]
+pattern_sample|pc_relative_address|00000040|adrp x19, #0x106f000
+pattern_sample|pc_relative_address|0000004c|adrp x8, #0x1064000
+pattern_sample|pc_relative_address|00000054|adrp x9, #0x1064000
+pattern_sample|pc_relative_address|00000058|adrp x10, #0x1064000
+pattern_sample|pc_relative_address|00000064|adrp x11, #0x1064000
+pattern_sample|pc_relative_address|00000068|adrp x12, #0x1064000
+pattern_sample|pc_relative_address|00000074|adrp x13, #0x1064000
+call|00000110|006bef50
+pattern_sample|indirect_call|00000150|blr x8
+prologue|00000248|fd7b02a9|x29, x30, [sp, #0x20]
+call|00000260|00339bf0
+prologue|000002d4|fd7b01a9|x29, x30, [sp, #0x10]
+call|00000304|00339bf0
+prologue|00000368|fd7b05a9|x29, x30, [sp, #0x50]
+call|00000384|002a5240
+call|00000390|002a53c0
+call|000003c0|003151b0
+call|000003d4|00315e40
+pattern_sample|indirect_call|000003e4|blr x8
+prologue|00000430|fd7b04a9|x29, x30, [sp, #0x40]
+call|00000440|002b8390
+call|00000478|0031fa00
+call|00000494|002a5600
+pattern_sample|indirect_call|000004c4|blr x8
+call|000004c8|003bdf30
+call|000004e0|00361670
+pattern_sample|indirect_call|000004f0|blr x8
+prologue|00000684|fd7b01a9|x29, x30, [sp, #0x10]
+call|0000069c|00339dc0
+prologue|00000728|fd7b02a9|x29, x30, [sp, #0x20]
+call|00000740|00339bf0
+prologue|000007b4|fd7b01a9|x29, x30, [sp, #0x10]
+call|000007e4|00339bf0
+prologue|0000084c|fd7b14a9|x29, x30, [sp, #0x140]
+call|00000868|002a5240
+call|00000874|002a53c0
+call|00000888|0036efa0
+call|000008b8|003151b0
+call|000008c8|0036fb00
+call|000008d8|00313980
+call|000008e0|0036cdb0
+call|000008e8|0036cbd0
+call|00000904|00315870
+call|00000910|0036f4d0
+call|0000091c|00530670
+call|00000928|0019a230
+pattern_sample|indirect_call|00000940|blr x8
+call|00000954|00315e40
+call|00000974|00315e40
+pattern_sample|indirect_call|00000984|blr x8
+prologue|000009c0|fd7b04a9|x29, x30, [sp, #0x40]
+call|000009d8|002b8390
+call|00000a10|0031fa00
+call|00000a2c|002a5600
+call|00000a54|0019a6a0
+prologue|00000ae4|fd7b01a9|x29, x30, [sp, #0x10]
+call|00000afc|00339dc0
+prologue|00000b38|fd7b02a9|x29, x30, [sp, #0x20]
+call|00000b50|00339bf0
+prologue|00000bc4|fd7b01a9|x29, x30, [sp, #0x10]
+call|00000bf4|00339bf0
+prologue|00000c68|fd7b1aa9|x29, x30, [sp, #0x1a0]
+call|00000c84|002a5240
+call|00000c90|002a53c0
+call|00000cc0|003151b0
+call|00000cd4|00315e40
+call|00000cdc|0023ed20
+call|00000cec|0036fb00
+call|00000d0c|00531820
+call|00000d24|00313980
+call|00000d2c|0036cdb0
+call|00000d34|0036cbd0
+call|00000d4c|00315870
+call|00000d58|0036f4d0
+call|00000d64|00530670
+call|00000d70|000ff7e0
+pattern_sample|indirect_call|00000d84|blr x8
+call|00000dd0|00361670
+pattern_sample|indirect_call|00000de0|blr x8
+prologue|00000e30|fd7b04a9|x29, x30, [sp, #0x40]
+call|00000e40|002b8390
+call|00000e78|0031fa00
+call|00000e94|002a5600
+call|00000ee0|00100200
+call|00000f08|00361670
+prologue|00000f84|fd7b01a9|x29, x30, [sp, #0x10]
+call|00000f9c|00339dc0
+prologue|00000fd4|fd7b01a9|x29, x30, [sp, #0x10]
+call|00000fe8|002a52f0
+prologue|00001024|fd7b01a9|x29, x30, [sp, #0x10]
+call|00001050|002a52f0
+prologue|0000109c|fd7b04a9|x29, x30, [sp, #0x40]
+call|000010ac|002a53c0
+call|000010bc|003bf860
+call|000010c8|003bf860
+call|000010dc|0036efb0
+call|000010f0|0036ef90
+call|00001104|0036ef90
+call|00001118|0036ef90
+call|0000112c|0036ef90
+prologue|00001174|fd7b01a9|x29, x30, [sp, #0x10]
+call|00001188|00339bf0
+prologue|00001214|fd7b01a9|x29, x30, [sp, #0x10]
+call|00001240|00339bf0
+prologue|000012c4|fd7b01a9|x29, x30, [sp, #0x10]
+call|000012d4|003122c0
+call|000012dc|00312800
+call|000012e8|00312880
+call|000012fc|00312350
+call|00001308|003be140
+call|0000131c|0036efa0
+call|00001334|0036ef80
+call|00001348|0036ef80
+call|0000135c|0036efa0
+call|00001374|0036ef80
+call|00001388|0036ef80
+call|0000139c|0036efa0
+call|000013b0|0036ef60
+call|000013c0|002a6de0
+pattern_sample|indirect_branch|000013dc|br x1
+prologue|000013e8|fd7b02a9|x29, x30, [sp, #0x20]
+call|00001408|0028a780
+call|00001414|00347a70
+pattern_sample|vector_fp|00001418|fneg s1, s0
+pattern_sample|vector_fp|0000141c|fcmp s0, #0.0
+pattern_sample|vector_fp|00001420|fcsel s0, s0, s1, gt
+pattern_sample|vector_fp|00001428|fcmp s0, s1
+call|00001444|0028a7f0
+call|00001450|00347a70
+pattern_sample|vector_fp|00001454|fneg s1, s0
+pattern_sample|vector_fp|00001458|fcmp s0, #0.0
+pattern_sample|vector_fp|0000145c|fcsel s0, s0, s1, gt
+pattern_sample|vector_fp|00001464|fcmp s0, s1
+call|00001484|0028a850
+prologue|000014f4|fd7b01a9|x29, x30, [sp, #0x10]
+call|00001510|002b95d0
+call|00001520|002a6c50
+call|0000152c|000013e0
+prologue|00001574|fd7b01a9|x29, x30, [sp, #0x10]
+call|0000158c|00339dc0
+prologue|000015b8|fd7b17a9|x29, x30, [sp, #0x170]
+call|000015d0|0036fb00
+call|0000161c|00530670
+call|00001630|00339bf0
+call|00001670|002a5360
+call|00001680|00313980
+call|00001688|0036cdb0
+call|000016a4|00315870
+call|000016b4|002a5240
+call|000016c0|002a53c0
+call|000016e0|003151b0
+prologue|00001728|fd7b02a9|x29, x30, [sp, #0x20]
+call|0000175c|00339bf0
+call|000017a0|002a5360
+prologue|000017c8|fd7b05a9|x29, x30, [sp, #0x50]
+call|000017e0|002a5240
+call|000017ec|002a53c0
+call|0000181c|003151b0
+prologue|00001848|fd7b02a9|x29, x30, [sp, #0x20]
+call|00001864|00339bf0
+call|000018b8|002a5360
+prologue|000018e0|fd7b04a9|x29, x30, [sp, #0x40]
+call|000018f4|00312190
+call|00001900|002b8390
+call|00001938|0031fa00
+call|00001954|002a5600
+prologue|000019d4|fd7b01a9|x29, x30, [sp, #0x10]
+call|000019ec|00339dc0
+prologue|00001a04|fd7b01a9|x29, x30, [sp, #0x10]
+call|00001a18|002a52f0
+prologue|00001a54|fd7b01a9|x29, x30, [sp, #0x10]
+call|00001a80|002a52f0
+prologue|00001abc|fd7b04a9|x29, x30, [sp, #0x40]
+call|00001acc|002a53c0
+call|00001adc|003bf860
+call|00001ae8|003bf860
+call|00001afc|0036efb0
+call|00001b10|0036efb0
+call|00001b24|0036efb0
+prologue|00001b44|fd7b01a9|x29, x30, [sp, #0x10]
+call|00001b58|00339bf0
+prologue|00001c14|fd7b01a9|x29, x30, [sp, #0x10]
+call|00001c40|00339bf0
+prologue|00001cfc|fd7b04a9|x29, x30, [sp, #0x40]
+call|00001d0c|003122c0
+call|00001d14|00312800
+call|00001d20|00312880
+call|00001d34|00312350
+prologue|00001e18|fd7b03a9|x29, x30, [sp, #0x30]
+prologue|00001ef8|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|00001fc4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002058|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|00002164|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000021c4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002260|fd7b06a9|x29, x30, [sp, #0x60]
+prologue|00002354|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000023b4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000023f4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002434|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002474|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000024b4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000024f4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002534|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002574|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000025b4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000025f4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002638|fd7b02a9|x29, x30, [sp, #0x20]
+pattern_sample|indirect_branch|0000283c|br x1
+prologue|00002844|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002894|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000028fc|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|00002ab0|fd7b04a9|x29, x30, [sp, #0x40]
+prologue|00002ba4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002be4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002c54|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002ca4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002ce4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002d24|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002d8c|fd7b04a9|x29, x30, [sp, #0x40]
+prologue|00002e84|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002f44|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00002ff4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00003064|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000030a8|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|00003138|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|000031e4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00003238|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|000032d8|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|000037ac|fd7b03a9|x29, x30, [sp, #0x30]
+prologue|00003a44|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00003a98|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|00003b74|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00003c14|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00003c64|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00003d34|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|00004024|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|000042f4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000043f4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00004518|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|00004a34|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|00004d04|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|00005040|fd7b04a9|x29, x30, [sp, #0x40]
+prologue|00005344|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000053a4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00005424|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00005464|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00005588|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|00005834|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00005884|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000058d8|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|00005bc4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00005c84|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00005d24|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00005f64|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00006004|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000060fc|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|00006248|fd7b03a9|x29, x30, [sp, #0x30]
+prologue|00006384|fd7b01a9|x29, x30, [sp, #0x10]
+pattern_sample|indirect_branch|000063b4|br x1
+prologue|000063d4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00006574|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00006644|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00006704|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00006874|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00006944|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000069c4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00006a0c|fd7b03a9|x29, x30, [sp, #0x30]
+prologue|00006b0c|fd7b03a9|x29, x30, [sp, #0x30]
+prologue|00006c54|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00006d34|fd7b01a9|x29, x30, [sp, #0x10]
+pattern_sample|indirect_branch|00006d68|br x1
+prologue|00006d8c|fd7b03a9|x29, x30, [sp, #0x30]
+prologue|00006eb8|fd7b02a9|x29, x30, [sp, #0x20]
+prologue|00006fd4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00007108|fd7b07a9|x29, x30, [sp, #0x70]
+prologue|00007734|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|00007a04|fd7b05a9|x29, x30, [sp, #0x50]
+prologue|00007d40|fd7b04a9|x29, x30, [sp, #0x40]
+prologue|00007fc4|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00008044|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|00008084|fd7b01a9|x29, x30, [sp, #0x10]
+prologue|000081a8|fd7b02a9|x29, x30, [sp, #0x20]
+pattern_sample|indirect_branch|00009c34|br x1
+pattern_sample|indirect_branch|00009d64|br x1
+pattern_sample|indirect_branch|0000a858|br x1
+pattern_sample|indirect_branch|0000cc6c|br x1
+pattern_sample|atomic_exclusive|00143cb8|ldxr w9, [x8]
+pattern_sample|atomic_exclusive|00143cc0|stxr w10, w9, [x8]
+pattern_sample|atomic_exclusive|002d5fe0|ldxr w9, [x8]
+pattern_sample|atomic_exclusive|002d5fe8|stxr w10, w9, [x8]
+pattern_sample|atomic_exclusive|002dcbd8|ldxr w9, [x8]
+pattern_sample|atomic_exclusive|002dcbe4|stxr w10, w9, [x8]
+pattern_sample|atomic_exclusive|002dcbf8|ldxr w9, [x8]
+pattern_sample|atomic_exclusive|002dcc08|stxr w10, w9, [x8]
+pattern_summary|indirect_calls=17344|indirect_branches=3706|pc_relative_addresses=77396|atomic_exclusive=1644|vector_fp=94906|system_operations=0|samples_per_pattern=8
+summary|text_bytes=7080400|instructions=1769991|data_records=109|likely_prologues=25555|calls=121563|prologues_listed=128|calls_listed=128
+ 
