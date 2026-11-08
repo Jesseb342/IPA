@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-08T13:38:44Z",
+  "generatedAt": "2026-11-08T22:14:47Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "e9aa71cb88e73dd2b9ebc711dec5981990a0ff90",
+    "commit": "110a6439e7e0c3dc05ebf64160cbbcad1ead89f2",
     "profilesPath": "dm/games"
   },
-  "count": 152,
+  "count": 154,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -1494,6 +1494,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008D7016438000/README.md"
     },
     {
+      "titleId": "01008D9022462000",
+      "name": "The Rogue Prince of Persia",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008D9022462000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008D9022462000/README.md"
+    },
+    {
       "titleId": "01008DB008C2C000",
       "name": "Pokémon Shield",
       "profileStatus": "profile_available",
@@ -2325,6 +2342,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100ECD018EBE000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100ECD018EBE000/README.md"
+    },
+    {
+      "titleId": "0100ED7012DB2000",
+      "name": "ROMANCE OF THE THREE KINGDOMS XIV: Diplomacy and Strategy Expansion Pack",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100ED7012DB2000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100ED7012DB2000/README.md"
     },
     {
       "titleId": "0100F2C0115B6000",
