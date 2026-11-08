@@ -1164,10 +1164,32 @@ private struct ImportScreenView: View {
                             .textSelection(.enabled)
                     }
                     if !disassemblyLog.isEmpty {
-                        Text(disassemblyLog)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Diagnostic report")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button {
+                                    UIPasteboard.general.string = disassemblyLog
+                                } label: {
+                                    Label("Copy Full Report", systemImage: "doc.on.doc")
+                                        .font(.caption.weight(.semibold))
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            ScrollView([.horizontal, .vertical]) {
+                                Text(disassemblyLog)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(8)
+                            }
+                            .frame(maxHeight: 320)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
                     }
 
                     if importing {
