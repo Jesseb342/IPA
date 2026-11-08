@@ -157,7 +157,7 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
             if (strcmp(insn->mnemonic, "blr") == 0) {
                 indirect_calls++;
                 if (indirect_call_samples < 8 && append_text(output, output_capacity, &used,
-                    "pattern_sample|indirect_call|%08llx|%s %s\\n",
+                    "pattern_sample|indirect_call|%08llx|%s %s\n",
                     (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
                     cs_free(items, count); cs_close(&handle); return -2;
                 }
@@ -166,7 +166,7 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
             if (strcmp(insn->mnemonic, "br") == 0) {
                 indirect_branches++;
                 if (indirect_branch_samples < 8 && append_text(output, output_capacity, &used,
-                    "pattern_sample|indirect_branch|%08llx|%s %s\\n",
+                    "pattern_sample|indirect_branch|%08llx|%s %s\n",
                     (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
                     cs_free(items, count); cs_close(&handle); return -2;
                 }
@@ -175,7 +175,7 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
             if (strcmp(insn->mnemonic, "adr") == 0 || strcmp(insn->mnemonic, "adrp") == 0) {
                 pc_relative++;
                 if (pc_relative_samples < 8 && append_text(output, output_capacity, &used,
-                    "pattern_sample|pc_relative_address|%08llx|%s %s\\n",
+                    "pattern_sample|pc_relative_address|%08llx|%s %s\n",
                     (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
                     cs_free(items, count); cs_close(&handle); return -2;
                 }
@@ -189,7 +189,7 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
                 mnemonic_starts_with(insn->mnemonic, "stxp")) {
                 atomic_ops++;
                 if (atomic_samples < 8 && append_text(output, output_capacity, &used,
-                    "pattern_sample|atomic_exclusive|%08llx|%s %s\\n",
+                    "pattern_sample|atomic_exclusive|%08llx|%s %s\n",
                     (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
                     cs_free(items, count); cs_close(&handle); return -2;
                 }
@@ -211,7 +211,7 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
                 mnemonic_starts_with(insn->mnemonic, "smov")) {
                 vector_fp_ops++;
                 if (vector_fp_samples < 8 && append_text(output, output_capacity, &used,
-                    "pattern_sample|vector_fp|%08llx|%s %s\\n",
+                    "pattern_sample|vector_fp|%08llx|%s %s\n",
                     (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
                     cs_free(items, count); cs_close(&handle); return -2;
                 }
@@ -221,7 +221,7 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
                                    sizeof(system_names) / sizeof(system_names[0]))) {
                 system_ops++;
                 if (system_samples < 8 && append_text(output, output_capacity, &used,
-                    "pattern_sample|system_operation|%08llx|%s %s\\n",
+                    "pattern_sample|system_operation|%08llx|%s %s\n",
                     (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
                     cs_free(items, count); cs_close(&handle); return -2;
                 }
@@ -262,14 +262,14 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
     }
 
     if (append_text(output, output_capacity, &used,
-        "pattern_summary|indirect_calls=%llu|indirect_branches=%llu|pc_relative_addresses=%llu|atomic_exclusive=%llu|vector_fp=%llu|system_operations=%llu|samples_per_pattern=8\\n",
+        "pattern_summary|indirect_calls=%llu|indirect_branches=%llu|pc_relative_addresses=%llu|atomic_exclusive=%llu|vector_fp=%llu|system_operations=%llu|samples_per_pattern=8\n",
         (unsigned long long)indirect_calls, (unsigned long long)indirect_branches,
         (unsigned long long)pc_relative, (unsigned long long)atomic_ops,
         (unsigned long long)vector_fp_ops, (unsigned long long)system_ops) != 0) {
         cs_close(&handle); return -2;
     }
     int result = append_text(output, output_capacity, &used,
-        "summary|text_bytes=%u|instructions=%llu|data_records=%llu|likely_prologues=%llu|calls=%llu|prologues_listed=%u|calls_listed=%u\\n",
+        "summary|text_bytes=%u|instructions=%llu|data_records=%llu|likely_prologues=%llu|calls=%llu|prologues_listed=%u|calls_listed=%u\n",
         text_size, (unsigned long long)instruction_count, (unsigned long long)data_count,
         (unsigned long long)prologue_count, (unsigned long long)call_count,
         prologues_reported, calls_reported);
@@ -433,7 +433,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
     uint32_t caller_counts[512] = {0}, caller_reported[512] = {0};
     uint64_t last_stub = UINT64_MAX;
     if (append_text(output, output_capacity, &used,
-                    "discovery|main-text linker-stub scan; static pointer chains are followed up to 8 levels; no code is modified.\\n") != 0) {
+                    "discovery|main-text linker-stub scan; static pointer chains are followed up to 8 levels; no code is modified.\n") != 0) {
         cs_close(&handle); return -2;
     }
 
@@ -471,19 +471,19 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                 cs_free(items, count); cs_close(&handle); return -2;
             }
             if (slot_file == SIZE_MAX) {
-                if (append_text(output, output_capacity, &used, "resolution=slot-not-file-backed\\n") != 0) {
+                if (append_text(output, output_capacity, &used, "resolution=slot-not-file-backed\n") != 0) {
                     cs_free(items, count); cs_close(&handle); return -2;
                 }
                 unresolved++;
             } else {
                 if (append_text(output, output_capacity, &used,
-                                "slot_file_offset=%08llx|raw_pointer=%016llx\\n",
+                                "slot_file_offset=%08llx|raw_pointer=%016llx\n",
                                 (unsigned long long)slot_file, (unsigned long long)raw) != 0) {
                     cs_free(items, count); cs_close(&handle); return -2;
                 }
                 if (raw == 0) {
                     if (append_text(output, output_capacity, &used,
-                                    "resolution|stub=%08llx|null-or-unresolved\\n",
+                                    "resolution|stub=%08llx|null-or-unresolved\n",
                                     (unsigned long long)start) != 0) {
                         cs_free(items, count); cs_close(&handle); return -2;
                     }
@@ -492,7 +492,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                     uint32_t text_mem = read_le32(file + 0x14);
                     if (raw >= text_mem && raw - text_mem < text_size) {
                         if (append_text(output, output_capacity, &used,
-                                        "resolution|stub=%08llx|text_offset=%08llx|static-pointer-in-text\\n",
+                                        "resolution|stub=%08llx|text_offset=%08llx|static-pointer-in-text\n",
                                         (unsigned long long)start,
                                         (unsigned long long)(raw - text_mem)) != 0) {
                             cs_free(items, count); cs_close(&handle); return -2;
@@ -508,7 +508,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                                 if (visited[v] == target_offset) seen = 1;
                             if (seen) {
                                 if (append_text(output, output_capacity, &used,
-                                                "chain|from=%08llx|to=%08llx|cycle\\n",
+                                                "chain|from=%08llx|to=%08llx|cycle\n",
                                                 (unsigned long long)chain_from,
                                                 (unsigned long long)target_offset) != 0) {
                                     cs_free(items, count); cs_close(&handle); return -2;
@@ -525,7 +525,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                                                         &next_slot, &next_raw,
                                                         &next_file, &next_save)) {
                                 if (append_text(output, output_capacity, &used,
-                                                "chain|from=%08llx|to=%08llx|terminal=non-stub\\n",
+                                                "chain|from=%08llx|to=%08llx|terminal=non-stub\n",
                                                 (unsigned long long)chain_from,
                                                 (unsigned long long)target_offset) != 0) {
                                     cs_free(items, count); cs_close(&handle); return -2;
@@ -534,7 +534,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                             }
                             if (next_file == SIZE_MAX) {
                                 if (append_text(output, output_capacity, &used,
-                                                "chain|from=%08llx|to=%08llx|stub=%08llx|slot_va=%08llx|resolution=slot-not-file-backed\\n",
+                                                "chain|from=%08llx|to=%08llx|stub=%08llx|slot_va=%08llx|resolution=slot-not-file-backed\n",
                                                 (unsigned long long)chain_from,
                                                 (unsigned long long)target_offset,
                                                 (unsigned long long)next_start,
@@ -547,7 +547,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                                 break;
                             }
                             if (append_text(output, output_capacity, &used,
-                                            "chain|from=%08llx|to=%08llx|stub=%08llx|slot_va=%08llx|raw_pointer=%016llx\\n",
+                                            "chain|from=%08llx|to=%08llx|stub=%08llx|slot_va=%08llx|raw_pointer=%016llx\n",
                                             (unsigned long long)chain_from,
                                             (unsigned long long)target_offset,
                                             (unsigned long long)next_start,
@@ -558,7 +558,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                             chains++;
                             if (next_raw == 0) {
                                 if (append_text(output, output_capacity, &used,
-                                                "chain_resolution|stub=%08llx|null-or-unresolved\\n",
+                                                "chain_resolution|stub=%08llx|null-or-unresolved\n",
                                                 (unsigned long long)next_start) != 0) {
                                     cs_free(items, count); cs_close(&handle); return -2;
                                 }
@@ -568,7 +568,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                             }
                             if (next_raw < text_mem || next_raw - text_mem >= text_size) {
                                 if (append_text(output, output_capacity, &used,
-                                                "chain_resolution|stub=%08llx|not-a-static-text-address\\n",
+                                                "chain_resolution|stub=%08llx|not-a-static-text-address\n",
                                                 (unsigned long long)next_start) != 0) {
                                     cs_free(items, count); cs_close(&handle); return -2;
                                 }
@@ -580,7 +580,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
                         }
                     } else {
                         if (append_text(output, output_capacity, &used,
-                                        "resolution|stub=%08llx|not-a-static-text-address\\n",
+                                        "resolution|stub=%08llx|not-a-static-text-address\n",
                                         (unsigned long long)start) != 0) {
                             cs_free(items, count); cs_close(&handle); return -2;
                         }
@@ -595,7 +595,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
         if (used + 2048 >= output_capacity) {
             cs_close(&handle);
             return append_text(output, output_capacity, &used,
-                               "warning|Output limit reached; increase output capacity or reduce report limit.\\n") == 0 ? 0 : -2;
+                               "warning|Output limit reached; increase output capacity or reduce report limit.\n") == 0 ? 0 : -2;
         }
     }
     // Second pass: map direct BL call sites back to discovered stubs. The
@@ -641,7 +641,7 @@ NXN_EXPORT int32_t nxn_arm64_discover_linker_stubs(const uint8_t *file, size_t f
     }
 
     int result = append_text(output, output_capacity, &used,
-        "summary|text_bytes=%u|decoded_records=%llu|linker_stubs=%u|static_text_targets=%u|unresolved=%u|traced_chain_edges=%u\\n",
+        "summary|text_bytes=%u|decoded_records=%llu|linker_stubs=%u|static_text_targets=%u|unresolved=%u|traced_chain_edges=%u\n",
         text_size, (unsigned long long)scanned_records, stubs, resolved, unresolved, chains);
     cs_close(&handle);
     return result == 0 ? 0 : -2;
