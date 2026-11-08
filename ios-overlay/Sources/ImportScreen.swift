@@ -74,6 +74,96 @@ private enum MetadataProbe {
     }
 }
 
+
+private enum ExtractionManifest {
+    static func write(
+        keysURL: URL,
+        baseURL: URL,
+        updateURL: URL?,
+        dlcURLs: [URL],
+        baseTitleID: String,
+        outputDirectory: URL
+    ) throws -> URL {
+        var lines = [
+            "format|1",
+            "result|extraction_succeeded",
+            "base_package|\\(baseURL.lastPathComponent)",
+            "base_title_id|\\(baseTitleID)",
+            "update_selected|\\(updateURL == nil ? "false" : "true")",
+            "update_package|\\(updateURL?.lastPathComponent ?? "none")",
+            "dlc_package_count|\\(dlcURLs.count)"
+        ]
+
+        let baseRecords = try MetadataProbe.inspect(keysURL: keysURL, nspURL: baseURL)
+        for record in baseRecords {
+            lines.append("base_content|\\(record.type)|\\(record.titleID)|version=\\(record.version)")
+        }
+
+        if let updateURL {
+            let updateRecords = try MetadataProbe.inspect(keysURL: keysURL, nspURL: updateURL)
+            for record in updateRecords {
+                lines.append("update_content|\\(record.type)|\\(record.titleID)|version=\\(record.version)")
+            }
+        }
+
+        for (packageIndex, packageURL) in dlcURLs.enumerated() {
+            lines.append("dlc_package|\\(packageIndex + 1)|\\(packageURL.lastPathComponent)")
+            let records = try MetadataProbe.inspect(keysURL: keysURL, nspURL: packageURL)
+            for record in records {
+                lines.append("dlc_content|\\(record.type)|\\(record.titleID)|version=\\(record.version)")
+            }
+        }
+
+        let manager = FileManager.default
+        let artifactRoots = ["ExeFS", "aoc"]
+        var aocImages = 0
+        var aocBytes: UInt64 = 0
+        for rootName in artifactRoots {
+            let root = outputDirectory.appendingPathComponent(rootName, isDirectory: true)
+            guard manager.fileExists(atPath: root.path),
+                  let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: nil) else { continue }
+            for case let fileURL as URL in enumerator {
+                var isDirectory: ObjCBool = false
+                guard manager.fileExists(atPath: fileURL.path, isDirectory: &isDirectory), !isDirectory.boolValue else { continue }
+                let attributes = try manager.attributesOfItem(atPath: fileURL.path)
+                let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+                let relative = String(fileURL.path.dropFirst(outputDirectory.path.count + 1))
+                lines.append("artifact|\\(relative)|bytes=\\(size)")
+                if rootName == "aoc" && fileURL.pathExtension.lowercased() == "img" {
+                    aocImages += 1
+                    aocBytes += size
+                }
+            }
+        }
+
+        let romfsURL = outputDirectory.appendingPathComponent("RomFS.img")
+        if manager.fileExists(atPath: romfsURL.path) {
+            let attributes = try manager.attributesOfItem(atPath: romfsURL.path)
+            let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+            lines.append("artifact|RomFS.img|bytes=\\(size)")
+        }
+        lines.append("aoc_summary|images=\\(aocImages)|total_bytes=\\(aocBytes)")
+        lines.append("scan_target|PreparedGame/RewrittenExeFS/main (after NSO rewrite)")
+        lines.append("scan_status|pending")
+
+        let manifestURL = outputDirectory.appendingPathComponent("extraction-manifest.txt")
+        try (lines.joined(separator: "\\n") + "\\n").write(to: manifestURL, atomically: true, encoding: .utf8)
+        return manifestURL
+    }
+
+    static func combinedReport(preparedDirectory: URL, scanReport: String) -> String {
+        let manifestURL = preparedDirectory.appendingPathComponent("extraction-manifest.txt")
+        var manifest = (try? String(contentsOf: manifestURL, encoding: .utf8)) ?? "manifest|missing"
+        manifest += "scan_status|completed\\n"
+        manifest += "scan_module|RewrittenExeFS/main\\n"
+        if let summary = scanReport.split(separator: "\\n").first(where: { $0.hasPrefix("summary|") }) {
+            manifest += "scan_summary|\\(summary)\\n"
+        }
+        try? manifest.write(to: manifestURL, atomically: true, encoding: .utf8)
+        return manifest + "\\n--- MAIN NSO ANALYSIS ---\\n" + scanReport
+    }
+}
+
 private enum GameExtractor {
     typealias ExtractFunction = @convention(c) (
         UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>,
@@ -1449,6 +1539,14 @@ private struct ImportScreenView: View {
                     baseTitleID: baseTitleID,
                     outputDirectory: temporary
                 )
+                _ = try ExtractionManifest.write(
+                    keysURL: keyURL,
+                    baseURL: baseURL,
+                    updateURL: updateURL,
+                    dlcURLs: dlcURLs,
+                    baseTitleID: baseTitleID,
+                    outputDirectory: temporary
+                )
                 return [baseLog, dlcLog].filter { !$0.isEmpty }.joined(separator: "\n")
             }.value
 
@@ -1525,9 +1623,11 @@ private struct ImportScreenView: View {
             return
         }
         do {
-            disassemblyLog = try await Task.detached(priority: .userInitiated) {
+            let scanReport = try await Task.detached(priority: .userInitiated) {
                 try GameExtractor.analyzeNSO(url: mainModule)
             }.value
+            let prepared = documents.appendingPathComponent("PreparedGame", isDirectory: true)
+            disassemblyLog = ExtractionManifest.combinedReport(preparedDirectory: prepared, scanReport: scanReport)
         } catch {
             disassemblyLog = "Full NSO analysis failed: \(error.localizedDescription)"
         }
