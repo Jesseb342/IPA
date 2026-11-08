@@ -27,6 +27,16 @@ static int append_text(char *out, size_t capacity, size_t *used, const char *for
     return 0;
 }
 
+static int mnemonic_is_one_of(const char *mnemonic, const char *const *names, size_t count) {
+    for (size_t i = 0; i < count; i++)
+        if (strcmp(mnemonic, names[i]) == 0) return 1;
+    return 0;
+}
+
+static int mnemonic_starts_with(const char *mnemonic, const char *prefix) {
+    return strncmp(mnemonic, prefix, strlen(prefix)) == 0;
+}
+
 // Input must be a rewritten, uncompressed NSO. The routine never modifies it.
 NXN_EXPORT int32_t nxn_arm64_disassemble_nso(const uint8_t *file, size_t file_size,
                                               uint32_t max_instructions,
@@ -109,7 +119,21 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
 
     size_t used = 0;
     uint64_t instruction_count = 0, data_count = 0, prologue_count = 0, call_count = 0;
+    uint64_t indirect_calls = 0, indirect_branches = 0, pc_relative = 0;
+    uint64_t atomic_ops = 0, vector_fp_ops = 0, system_ops = 0;
     uint32_t prologues_reported = 0, calls_reported = 0;
+    uint32_t indirect_call_samples = 0, indirect_branch_samples = 0;
+    uint32_t pc_relative_samples = 0, atomic_samples = 0;
+    uint32_t vector_fp_samples = 0, system_samples = 0;
+    static const char *const atomic_names[] = {
+        "ldxr", "ldxrb", "ldxrh", "ldaxr", "ldaxrb", "ldaxrh",
+        "stxr", "stxrb", "stxrh", "stlxr", "stlxrb", "stlxrh",
+        "cas", "casa", "casl", "casal", "swp", "swpa", "swpl", "swpal",
+        "ldadd", "ldadda", "ldaddl", "ldaddal", "ldclr", "ldeor", "ldset"
+    };
+    static const char *const system_names[] = {
+        "mrs", "msr", "sys", "sysl", "svc", "hvc", "smc", "tlbi", "dc", "ic"
+    };
     if (append_text(output, output_capacity, &used,
                     "analysis|Full main-text scan; offsets are relative to NSO text. This is heuristic discovery, not an automatic patch plan.\n") != 0) {
         cs_close(&handle); return -2;
@@ -128,6 +152,81 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
                 continue;
             }
             instruction_count++;
+
+            // Reusable ARM64 instruction-family signals, not proof of incompatibility.
+            if (strcmp(insn->mnemonic, "blr") == 0) {
+                indirect_calls++;
+                if (indirect_call_samples < 8 && append_text(output, output_capacity, &used,
+                    "pattern_sample|indirect_call|%08llx|%s %s\\n",
+                    (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
+                    cs_free(items, count); cs_close(&handle); return -2;
+                }
+                if (indirect_call_samples < 8) indirect_call_samples++;
+            }
+            if (strcmp(insn->mnemonic, "br") == 0) {
+                indirect_branches++;
+                if (indirect_branch_samples < 8 && append_text(output, output_capacity, &used,
+                    "pattern_sample|indirect_branch|%08llx|%s %s\\n",
+                    (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
+                    cs_free(items, count); cs_close(&handle); return -2;
+                }
+                if (indirect_branch_samples < 8) indirect_branch_samples++;
+            }
+            if (strcmp(insn->mnemonic, "adr") == 0 || strcmp(insn->mnemonic, "adrp") == 0) {
+                pc_relative++;
+                if (pc_relative_samples < 8 && append_text(output, output_capacity, &used,
+                    "pattern_sample|pc_relative_address|%08llx|%s %s\\n",
+                    (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
+                    cs_free(items, count); cs_close(&handle); return -2;
+                }
+                if (pc_relative_samples < 8) pc_relative_samples++;
+            }
+            if (mnemonic_is_one_of(insn->mnemonic, atomic_names,
+                                   sizeof(atomic_names) / sizeof(atomic_names[0])) ||
+                mnemonic_starts_with(insn->mnemonic, "ldaxp") ||
+                mnemonic_starts_with(insn->mnemonic, "ldxp") ||
+                mnemonic_starts_with(insn->mnemonic, "stlxp") ||
+                mnemonic_starts_with(insn->mnemonic, "stxp")) {
+                atomic_ops++;
+                if (atomic_samples < 8 && append_text(output, output_capacity, &used,
+                    "pattern_sample|atomic_exclusive|%08llx|%s %s\\n",
+                    (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
+                    cs_free(items, count); cs_close(&handle); return -2;
+                }
+                if (atomic_samples < 8) atomic_samples++;
+            }
+            if (mnemonic_starts_with(insn->mnemonic, "f") ||
+                mnemonic_starts_with(insn->mnemonic, "ld1") ||
+                mnemonic_starts_with(insn->mnemonic, "ld2") ||
+                mnemonic_starts_with(insn->mnemonic, "ld3") ||
+                mnemonic_starts_with(insn->mnemonic, "ld4") ||
+                mnemonic_starts_with(insn->mnemonic, "st1") ||
+                mnemonic_starts_with(insn->mnemonic, "st2") ||
+                mnemonic_starts_with(insn->mnemonic, "st3") ||
+                mnemonic_starts_with(insn->mnemonic, "st4") ||
+                mnemonic_starts_with(insn->mnemonic, "movi") ||
+                mnemonic_starts_with(insn->mnemonic, "tbl") ||
+                mnemonic_starts_with(insn->mnemonic, "dup") ||
+                mnemonic_starts_with(insn->mnemonic, "umov") ||
+                mnemonic_starts_with(insn->mnemonic, "smov")) {
+                vector_fp_ops++;
+                if (vector_fp_samples < 8 && append_text(output, output_capacity, &used,
+                    "pattern_sample|vector_fp|%08llx|%s %s\\n",
+                    (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
+                    cs_free(items, count); cs_close(&handle); return -2;
+                }
+                if (vector_fp_samples < 8) vector_fp_samples++;
+            }
+            if (mnemonic_is_one_of(insn->mnemonic, system_names,
+                                   sizeof(system_names) / sizeof(system_names[0]))) {
+                system_ops++;
+                if (system_samples < 8 && append_text(output, output_capacity, &used,
+                    "pattern_sample|system_operation|%08llx|%s %s\\n",
+                    (unsigned long long)insn->address, insn->mnemonic, insn->op_str) != 0) {
+                    cs_free(items, count); cs_close(&handle); return -2;
+                }
+                if (system_samples < 8) system_samples++;
+            }
 
             if (strcmp(insn->mnemonic, "stp") == 0 &&
                 strstr(insn->op_str, "x29, x30, [sp") != NULL) {
@@ -162,8 +261,15 @@ NXN_EXPORT int32_t nxn_arm64_analyze_nso(const uint8_t *file, size_t file_size,
         cs_free(items, count);
     }
 
+    if (append_text(output, output_capacity, &used,
+        "pattern_summary|indirect_calls=%llu|indirect_branches=%llu|pc_relative_addresses=%llu|atomic_exclusive=%llu|vector_fp=%llu|system_operations=%llu|samples_per_pattern=8\\n",
+        (unsigned long long)indirect_calls, (unsigned long long)indirect_branches,
+        (unsigned long long)pc_relative, (unsigned long long)atomic_ops,
+        (unsigned long long)vector_fp_ops, (unsigned long long)system_ops) != 0) {
+        cs_close(&handle); return -2;
+    }
     int result = append_text(output, output_capacity, &used,
-        "summary|text_bytes=%u|instructions=%llu|data_records=%llu|likely_prologues=%llu|calls=%llu|prologues_listed=%u|calls_listed=%u\n",
+        "summary|text_bytes=%u|instructions=%llu|data_records=%llu|likely_prologues=%llu|calls=%llu|prologues_listed=%u|calls_listed=%u\\n",
         text_size, (unsigned long long)instruction_count, (unsigned long long)data_count,
         (unsigned long long)prologue_count, (unsigned long long)call_count,
         prologues_reported, calls_reported);
