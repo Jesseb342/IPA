@@ -87,30 +87,30 @@ private enum ExtractionManifest {
         var lines = [
             "format|1",
             "result|extraction_succeeded",
-            "base_package|\\(baseURL.lastPathComponent)",
-            "base_title_id|\\(baseTitleID)",
-            "update_selected|\\(updateURL == nil ? "false" : "true")",
-            "update_package|\\(updateURL?.lastPathComponent ?? "none")",
-            "dlc_package_count|\\(dlcURLs.count)"
+            "base_package|\(baseURL.lastPathComponent)",
+            "base_title_id|\(baseTitleID)",
+            "update_selected|\(updateURL == nil ? "false" : "true")",
+            "update_package|\(updateURL?.lastPathComponent ?? "none")",
+            "dlc_package_count|\(dlcURLs.count)"
         ]
 
         let baseRecords = try MetadataProbe.inspect(keysURL: keysURL, nspURL: baseURL)
         for record in baseRecords {
-            lines.append("base_content|\\(record.type)|\\(record.titleID)|version=\\(record.version)")
+            lines.append("base_content|\(record.type)|\(record.titleID)|version=\(record.version)")
         }
 
         if let updateURL {
             let updateRecords = try MetadataProbe.inspect(keysURL: keysURL, nspURL: updateURL)
             for record in updateRecords {
-                lines.append("update_content|\\(record.type)|\\(record.titleID)|version=\\(record.version)")
+                lines.append("update_content|\(record.type)|\(record.titleID)|version=\(record.version)")
             }
         }
 
         for (packageIndex, packageURL) in dlcURLs.enumerated() {
-            lines.append("dlc_package|\\(packageIndex + 1)|\\(packageURL.lastPathComponent)")
+            lines.append("dlc_package|\(packageIndex + 1)|\(packageURL.lastPathComponent)")
             let records = try MetadataProbe.inspect(keysURL: keysURL, nspURL: packageURL)
             for record in records {
-                lines.append("dlc_content|\\(record.type)|\\(record.titleID)|version=\\(record.version)")
+                lines.append("dlc_content|\(record.type)|\(record.titleID)|version=\(record.version)")
             }
         }
 
@@ -128,7 +128,7 @@ private enum ExtractionManifest {
                 let attributes = try manager.attributesOfItem(atPath: fileURL.path)
                 let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
                 let relative = String(fileURL.path.dropFirst(outputDirectory.path.count + 1))
-                lines.append("artifact|\\(relative)|bytes=\\(size)")
+                lines.append("artifact|\(relative)|bytes=\(size)")
                 if rootName == "aoc" && fileURL.pathExtension.lowercased() == "img" {
                     aocImages += 1
                     aocBytes += size
@@ -140,27 +140,27 @@ private enum ExtractionManifest {
         if manager.fileExists(atPath: romfsURL.path) {
             let attributes = try manager.attributesOfItem(atPath: romfsURL.path)
             let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
-            lines.append("artifact|RomFS.img|bytes=\\(size)")
+            lines.append("artifact|RomFS.img|bytes=\(size)")
         }
-        lines.append("aoc_summary|images=\\(aocImages)|total_bytes=\\(aocBytes)")
+        lines.append("aoc_summary|images=\(aocImages)|total_bytes=\(aocBytes)")
         lines.append("scan_target|PreparedGame/RewrittenExeFS/main (after NSO rewrite)")
         lines.append("scan_status|pending")
 
         let manifestURL = outputDirectory.appendingPathComponent("extraction-manifest.txt")
-        try (lines.joined(separator: "\\n") + "\\n").write(to: manifestURL, atomically: true, encoding: .utf8)
+        try (lines.joined(separator: "\n") + "\n").write(to: manifestURL, atomically: true, encoding: .utf8)
         return manifestURL
     }
 
     static func combinedReport(preparedDirectory: URL, scanReport: String) -> String {
         let manifestURL = preparedDirectory.appendingPathComponent("extraction-manifest.txt")
         var manifest = (try? String(contentsOf: manifestURL, encoding: .utf8)) ?? "manifest|missing"
-        manifest += "scan_status|completed\\n"
-        manifest += "scan_module|RewrittenExeFS/main\\n"
-        if let summary = scanReport.split(separator: "\\n").first(where: { $0.hasPrefix("summary|") }) {
-            manifest += "scan_summary|\\(summary)\\n"
+        manifest += "scan_status|completed\n"
+        manifest += "scan_module|RewrittenExeFS/main\n"
+        if let summary = scanReport.split(separator: "\n").first(where: { $0.hasPrefix("summary|") }) {
+            manifest += "scan_summary|\(summary)\n"
         }
         try? manifest.write(to: manifestURL, atomically: true, encoding: .utf8)
-        return manifest + "\\n--- MAIN NSO ANALYSIS ---\\n" + scanReport
+        return manifest + "\n--- MAIN NSO ANALYSIS ---\n" + scanReport
     }
 }
 
