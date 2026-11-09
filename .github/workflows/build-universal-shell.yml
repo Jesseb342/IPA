@@ -188,9 +188,12 @@ jobs:
           test -s ipa-overlay/ios-overlay/Sources/ImportScreen.swift
           python3 -m py_compile ipa-overlay/ios-overlay/tools/apply_import_ui.py
           cp ipa-overlay/ios-overlay/Sources/ImportScreen.swift dm/ios/Sources/ImportScreen.swift
+          cp ipa-overlay/ios-overlay/Sources/OnDeviceMetalCompiler.swift dm/ios/Sources/OnDeviceMetalCompiler.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
+          grep -q 'enum OnDeviceMetalCompiler' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'makeLibrary(source: source, options: options)' dm/ios/Sources/OnDeviceMetalCompiler.swift
           echo "IPA import UI overlay applied."
 
       - name: Build game-free shell
