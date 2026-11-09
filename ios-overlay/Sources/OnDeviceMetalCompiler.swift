@@ -34,7 +34,6 @@ enum OnDeviceMetalCompiler {
         }
 
         let options = MTLCompileOptions()
-        options.languageVersion = .version2_4
         return try device.makeLibrary(source: source, options: options)
     }
 
