@@ -224,8 +224,8 @@ jobs:
           FRAMEWORK="$PROBE_ROOT/NxNativeShaderTranslator.framework"
           mkdir -p "$FRAMEWORK"
           cp "$DYLIB" "$FRAMEWORK/NxNativeShaderTranslator"
-          install_name_tool -rpath @executable_path @executable_path/Frameworks \
-            "$FRAMEWORK/NxNativeShaderTranslator"
+          # The NativeAOT dylib has no existing LC_RPATH entry. Its framework
+          # install name is sufficient; the host app supplies Frameworks search path.
           install_name_tool -id \
             @rpath/NxNativeShaderTranslator.framework/NxNativeShaderTranslator \
             "$FRAMEWORK/NxNativeShaderTranslator"
