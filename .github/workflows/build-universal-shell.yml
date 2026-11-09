@@ -272,10 +272,13 @@ jobs:
           python3 -m py_compile ipa-overlay/ios-overlay/tools/apply_import_ui.py
           cp ipa-overlay/ios-overlay/Sources/ImportScreen.swift dm/ios/Sources/ImportScreen.swift
           cp ipa-overlay/ios-overlay/Sources/OnDeviceMetalCompiler.swift dm/ios/Sources/OnDeviceMetalCompiler.swift
+          cp ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift dm/ios/Sources/UnityShaderSourceScanner.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
           grep -q 'enum OnDeviceMetalCompiler' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'enum UnityShaderSourceScanner' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'Scan Unity Shader Sources' dm/ios/Sources/ImportScreen.swift
           grep -q 'enum ShaderTranslatorBridge' dm/ios/Sources/ImportScreen.swift
           grep -q 'nxn_translate_shader_jobs' dm/ios/Sources/ImportScreen.swift
           grep -q 'Test Shader Translator' dm/ios/Sources/ImportScreen.swift
