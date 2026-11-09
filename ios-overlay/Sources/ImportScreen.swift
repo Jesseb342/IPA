@@ -1077,6 +1077,8 @@ private struct ImportScreenView: View {
     @State private var metalCompilerLog = ""
     @State private var testingShaderTranslator = false
     @State private var shaderTranslatorLog = ""
+    @State private var scanningShaderSources = false
+    @State private var shaderSourceScanLog = ""
     @State private var disassemblingModules = false
     @State private var disassemblyLog = ""
     @State private var functionOffset = "00000038"
@@ -1220,6 +1222,28 @@ private struct ImportScreenView: View {
                         Text("The selected DLC packages will be extracted into Documents/PreparedGame/aoc as indexed RomFS images.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        Task { await scanUnityShaderSources() }
+                    } label: {
+                        Label("Scan Unity Shader Sources", systemImage: "doc.text.magnifyingglass")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!gameExtracted || scanningShaderSources || testingShaderTranslator || extracting)
+                    if scanningShaderSources {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Scanning the extracted game index…").foregroundStyle(.secondary)
+                        }
+                    }
+                    if !shaderSourceScanLog.isEmpty {
+                        Text(shaderSourceScanLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
 
                     Button {
@@ -1739,6 +1763,24 @@ private struct ImportScreenView: View {
             rewriteLog = report + "\nOutput: Documents/PreparedGame/RewrittenExeFS\nOriginal ExeFS was left unchanged. No game-specific patches were applied in this test."
         } catch {
             rewriteLog = "Rewrite failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func scanUnityShaderSources() async {
+        guard gameExtracted else { return }
+        scanningShaderSources = true
+        shaderSourceScanLog = ""
+        defer { scanningShaderSources = false }
+
+        let prepared = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PreparedGame", isDirectory: true)
+        do {
+            let report = try await Task.detached(priority: .userInitiated) {
+                try UnityShaderSourceScanner.scan(preparedDirectory: prepared)
+            }.value
+            shaderSourceScanLog = report
+        } catch {
+            shaderSourceScanLog = "scan_failed|\\(error.localizedDescription)"
         }
     }
 
