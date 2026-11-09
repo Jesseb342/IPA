@@ -229,20 +229,29 @@ enum UnityShaderSourceScanner {
         default: compressionName = "unknown_\(compression)"
         }
         let headerSize = UInt64(cursor)
+        let headerLine = "unityfs_header|format=\(format)|player=\(safe(playerVersion))|engine=\(safe(engineVersion))|total=\(totalSize)|header=\(headerSize)|info_compressed=\(compressedInfo)|info_uncompressed=\(uncompressedInfo)|info_compression=\(compressionName)|info_at_end=\(infoAtEnd)|flags=0x\(String(flags, radix: 16))"
         guard format == 6, totalSize > 0, totalSize <= fileLength,
               UInt64(compressedInfo) <= totalSize,
-              uncompressedInfo >= 20, uncompressedInfo <= 16 * 1024 * 1024 else { return nil }
+              uncompressedInfo >= 20, uncompressedInfo <= 16 * 1024 * 1024 else {
+            return [headerLine, "unityfs_block_info_error|header_bounds_rejected"]
+        }
         let infoOffset = infoAtEnd ? totalSize - UInt64(compressedInfo) : headerSize
         let dataOffset = infoAtEnd ? headerSize : headerSize + UInt64(compressedInfo)
         guard infoOffset <= totalSize, UInt64(compressedInfo) <= totalSize - infoOffset,
-              dataOffset <= totalSize, imageOffset <= UInt64.max - infoOffset else { return nil }
+              dataOffset <= totalSize, imageOffset <= UInt64.max - infoOffset else {
+            return [headerLine, "unityfs_block_info_error|metadata_offsets_out_of_bounds"]
+        }
 
         let packed = try? read(imageHandle, offset: imageOffset + infoOffset, count: Int(compressedInfo))
-        guard let packed, packed.count == Int(compressedInfo) else { return nil }
+        guard let packed, packed.count == Int(compressedInfo) else {
+            return [headerLine, "unityfs_block_info_error|metadata_read_incomplete"]
+        }
         let decoded: Data
         switch compression {
         case 0:
-            guard packed.count == Int(uncompressedInfo) else { return nil }
+            guard packed.count == Int(uncompressedInfo) else {
+                return [headerLine, "unityfs_block_info_error|uncompressed_size_mismatch"]
+            }
             decoded = packed
         case 2, 3:
             var output = Data(count: Int(uncompressedInfo))
@@ -254,7 +263,9 @@ enum UnityShaderSourceScanner {
                                                       Int(compressedInfo), nil, COMPRESSION_LZ4)
                 }
             }
-            guard decodedCount == Int(uncompressedInfo) else { return nil }
+            guard decodedCount == Int(uncompressedInfo) else {
+                return [headerLine, "unityfs_block_info_error|lz4_decode_failed_returned_\(decodedCount)_expected_\(uncompressedInfo)"]
+            }
             decoded = output
         default:
             return [
@@ -276,18 +287,28 @@ enum UnityShaderSourceScanner {
                    (UInt64(metadata[p + 4]) << 24) | (UInt64(metadata[p + 5]) << 16) |
                    (UInt64(metadata[p + 6]) << 8) | UInt64(metadata[p + 7])
         }
-        guard let blockCountRaw = metaBE32(16), blockCountRaw <= 100_000 else { return nil }
+        guard let blockCountRaw = metaBE32(16), blockCountRaw <= 100_000 else {
+            return [headerLine, "unityfs_block_info_error|invalid_block_count_or_metadata_prefix"]
+        }
         let blockCount = Int(blockCountRaw)
         var position = 20
-        guard blockCount <= (metadata.count - position) / 10 else { return nil }
+        guard blockCount <= (metadata.count - position) / 10 else {
+            return [headerLine, "unityfs_block_info_error|block_table_exceeds_metadata"]
+        }
         var totalUncompressed: UInt64 = 0
         for _ in 0..<blockCount {
-            guard let unpacked = metaBE32(position), metaBE32(position + 4) != nil else { return nil }
+            guard let unpacked = metaBE32(position), metaBE32(position + 4) != nil else {
+                return [headerLine, "unityfs_block_info_error|truncated_block_table"]
+            }
             totalUncompressed += UInt64(unpacked)
-            guard totalUncompressed <= totalSize * 64 else { return nil }
+            guard totalUncompressed <= totalSize * 64 else {
+                return [headerLine, "unityfs_block_info_error|uncompressed_total_implausible"]
+            }
             position += 10
         }
-        guard let nodeCountRaw = metaBE32(position), nodeCountRaw <= 200_000 else { return nil }
+        guard let nodeCountRaw = metaBE32(position), nodeCountRaw <= 200_000 else {
+            return [headerLine, "unityfs_block_info_error|invalid_node_count"]
+        }
         position += 4
         let nodeCount = Int(nodeCountRaw)
         var lines = [
@@ -297,13 +318,21 @@ enum UnityShaderSourceScanner {
         var emitted = 0
         for _ in 0..<nodeCount {
             guard let nodeOffset = metaBE64(position), let nodeSize = metaBE64(position + 8),
-                  let nodeFlags = metaBE32(position + 16) else { return nil }
+                  let nodeFlags = metaBE32(position + 16) else {
+                return [headerLine, "unityfs_block_info_error|truncated_node_record"]
+            }
             position += 20
-            guard nodeOffset <= totalUncompressed, nodeSize <= totalUncompressed - nodeOffset else { return nil }
-            guard position < metadata.count else { return nil }
+            guard nodeOffset <= totalUncompressed, nodeSize <= totalUncompressed - nodeOffset else {
+                return [headerLine, "unityfs_block_info_error|node_range_out_of_bounds"]
+            }
+            guard position < metadata.count else {
+                return [headerLine, "unityfs_block_info_error|missing_node_path"]
+            }
             let nameStart = position
             while position < metadata.count && metadata[position] != 0 { position += 1 }
-            guard position < metadata.count else { return nil }
+            guard position < metadata.count else {
+                return [headerLine, "unityfs_block_info_error|unterminated_node_path"]
+            }
             let nodePath = safe(String(decoding: metadata[nameStart..<position], as: UTF8.self))
             position += 1
             if emitted < 16 {
