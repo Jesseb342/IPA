@@ -1,4 +1,5 @@
 import Foundation
+import Compression
 
 /// Reads the app's indexed DMROMFS1 image without expanding multi-gigabyte game data.
 /// This first pass inventories Unity asset containers; it does not decrypt or upload anything.
@@ -85,7 +86,7 @@ enum UnityShaderSourceScanner {
         var bundleCandidates = 0
         var unityFSHeaderReports = 0
         var report: [String] = [
-            "unityfs_inspection|header_only_no_decompression",
+            "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
             "index_entries|\(count)",
@@ -136,8 +137,11 @@ enum UnityShaderSourceScanner {
                             if unityFSHeaderReports < 100 {
                                 report.append("unityfs_bundle|\(path)|bytes=\(child.length)")
                                 let headerData = try read(handle, offset: child.offset, count: min(Int(child.length), 512))
-                                if let detail = inspectUnityFSHeader(headerData, fileLength: child.length) {
-                                    report.append("unityfs_header|\(path)|\(detail)")
+                                if let details = inspectUnityFSHeader(headerData, fileLength: child.length,
+                                                                            imageHandle: handle, imageOffset: child.offset) {
+                                    for detail in details {
+                                        report.append("\(detail.hasPrefix("unityfs_header|") ? detail : detail.replacingOccurrences(of: "unityfs_", with: "unityfs_\(path)|"))")
+                                    }
                                 } else {
                                     report.append("unityfs_header_error|\(path)|header_truncated_or_invalid")
                                 }
@@ -164,10 +168,11 @@ enum UnityShaderSourceScanner {
         return output
     }
 
-    /// Parses only the UnityFS container header. It deliberately does not decompress block info or payloads.
-    private static func inspectUnityFSHeader(_ data: Data, fileLength: UInt64) -> String? {
+    /// Decompresses only UnityFS's small block-info metadata; bundle payload blocks remain untouched.
+    private static func inspectUnityFSHeader(_ data: Data, fileLength: UInt64,
+                                             imageHandle: FileHandle, imageOffset: UInt64) -> [String]? {
         let bytes = [UInt8](data)
-        guard bytes.count >= 8, Array(bytes[0..<8]) == Array("UnityFS\0".utf8) else { return nil }
+        guard bytes.count >= 8, Array(bytes[0..<8]) == Array("UnityFS\\0".utf8) else { return nil }
         var cursor = 8
 
         func readBE32(_ p: Int) -> UInt32? {
@@ -191,11 +196,16 @@ enum UnityShaderSourceScanner {
             cursor += 1
             return value
         }
+        func safe(_ value: String) -> String {
+            value.replacingOccurrences(of: "|", with: "_")
+                 .replacingOccurrences(of: "\\n", with: " ")
+                 .replacingOccurrences(of: "\\r", with: " ")
+        }
 
         guard let format = readBE32(cursor) else { return nil }
         cursor += 4
-        guard let playerVersion = readCString(), let engineVersion = readCString() else { return nil }
-        guard let totalSize = readBE64(cursor) else { return nil }
+        guard let playerVersion = readCString(), let engineVersion = readCString(),
+              let totalSize = readBE64(cursor) else { return nil }
         cursor += 8
         guard let compressedInfo = readBE32(cursor) else { return nil }
         cursor += 4
@@ -212,23 +222,93 @@ enum UnityShaderSourceScanner {
         case 1: compressionName = "lzma"
         case 2: compressionName = "lz4"
         case 3: compressionName = "lz4hc"
-        default: compressionName = "unknown_\(compression)"
+        default: compressionName = "unknown_\\(compression)"
         }
         let headerSize = UInt64(cursor)
-        guard totalSize > 0, totalSize <= fileLength,
+        guard format == 6, totalSize > 0, totalSize <= fileLength,
               UInt64(compressedInfo) <= totalSize,
-              UInt64(uncompressedInfo) <= 256 * 1024 * 1024 else { return nil }
+              uncompressedInfo >= 20, uncompressedInfo <= 16 * 1024 * 1024 else { return nil }
         let infoOffset = infoAtEnd ? totalSize - UInt64(compressedInfo) : headerSize
         let dataOffset = infoAtEnd ? headerSize : headerSize + UInt64(compressedInfo)
         guard infoOffset <= totalSize, UInt64(compressedInfo) <= totalSize - infoOffset,
-              dataOffset <= totalSize else { return nil }
+              dataOffset <= totalSize, imageOffset <= UInt64.max - infoOffset else { return nil }
 
-        func safe(_ value: String) -> String {
-            value.replacingOccurrences(of: "|", with: "_")
-                 .replacingOccurrences(of: "\n", with: " ")
-                 .replacingOccurrences(of: "\r", with: " ")
+        let packed = try? read(imageHandle, offset: imageOffset + infoOffset, count: Int(compressedInfo))
+        guard let packed, packed.count == Int(compressedInfo) else { return nil }
+        let decoded: Data
+        switch compression {
+        case 0:
+            guard packed.count == Int(uncompressedInfo) else { return nil }
+            decoded = packed
+        case 2, 3:
+            var output = Data(count: Int(uncompressedInfo))
+            let decodedCount = output.withUnsafeMutableBytes { destination in
+                packed.withUnsafeBytes { source in
+                    guard let dst = destination.bindMemory(to: UInt8.self).baseAddress,
+                          let src = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+                    return compression_decode_buffer(dst, Int(uncompressedInfo), src,
+                                                      Int(compressedInfo), nil, COMPRESSION_LZ4)
+                }
+            }
+            guard decodedCount == Int(uncompressedInfo) else { return nil }
+            decoded = output
+        default:
+            return [
+                "unityfs_header|format=\\(format)|player=\\(safe(playerVersion))|engine=\\(safe(engineVersion))|total=\\(totalSize)|header=\\(headerSize)|info_compressed=\\(compressedInfo)|info_uncompressed=\\(uncompressedInfo)|info_compression=\\(compressionName)|info_at_end=\\(infoAtEnd)|info_offset=\\(infoOffset)|data_offset=\\(dataOffset)|flags=0x\\(String(flags, radix: 16))",
+                "unityfs_block_info_error|unsupported_compression_\\(compressionName)"
+            ]
         }
-        return "format=\(format)|player=\(safe(playerVersion))|engine=\(safe(engineVersion))|total=\(totalSize)|header=\(headerSize)|info_compressed=\(compressedInfo)|info_uncompressed=\(uncompressedInfo)|info_compression=\(compressionName)|info_at_end=\(infoAtEnd)|info_offset=\(infoOffset)|data_offset=\(dataOffset)|flags=0x\(String(flags, radix: 16))"
+
+        let metadata = [UInt8](decoded)
+        func metaBE32(_ p: Int) -> UInt32? {
+            guard p >= 0, p + 4 <= metadata.count else { return nil }
+            return (UInt32(metadata[p]) << 24) | (UInt32(metadata[p + 1]) << 16) |
+                   (UInt32(metadata[p + 2]) << 8) | UInt32(metadata[p + 3])
+        }
+        func metaBE64(_ p: Int) -> UInt64? {
+            guard p >= 0, p + 8 <= metadata.count else { return nil }
+            return (UInt64(metadata[p]) << 56) | (UInt64(metadata[p + 1]) << 48) |
+                   (UInt64(metadata[p + 2]) << 40) | (UInt64(metadata[p + 3]) << 32) |
+                   (UInt64(metadata[p + 4]) << 24) | (UInt64(metadata[p + 5]) << 16) |
+                   (UInt64(metadata[p + 6]) << 8) | UInt64(metadata[p + 7])
+        }
+        guard let blockCountRaw = metaBE32(16), blockCountRaw <= 100_000 else { return nil }
+        let blockCount = Int(blockCountRaw)
+        var position = 20
+        guard blockCount <= (metadata.count - position) / 10 else { return nil }
+        var totalUncompressed: UInt64 = 0
+        for _ in 0..<blockCount {
+            guard let unpacked = metaBE32(position), metaBE32(position + 4) != nil else { return nil }
+            totalUncompressed += UInt64(unpacked)
+            guard totalUncompressed <= totalSize * 64 else { return nil }
+            position += 10
+        }
+        guard let nodeCountRaw = metaBE32(position), nodeCountRaw <= 200_000 else { return nil }
+        position += 4
+        let nodeCount = Int(nodeCountRaw)
+        var lines = [
+            "unityfs_header|format=\\(format)|player=\\(safe(playerVersion))|engine=\\(safe(engineVersion))|total=\\(totalSize)|header=\\(headerSize)|info_compressed=\\(compressedInfo)|info_uncompressed=\\(uncompressedInfo)|info_compression=\\(compressionName)|info_at_end=\\(infoAtEnd)|info_offset=\\(infoOffset)|data_offset=\\(dataOffset)|flags=0x\\(String(flags, radix: 16))",
+            "unityfs_block_info|blocks=\\(blockCount)|nodes=\\(nodeCount)|uncompressed_data=\\(totalUncompressed)"
+        ]
+        var emitted = 0
+        for _ in 0..<nodeCount {
+            guard let nodeOffset = metaBE64(position), let nodeSize = metaBE64(position + 8),
+                  let nodeFlags = metaBE32(position + 16) else { return nil }
+            position += 20
+            guard nodeOffset <= totalUncompressed, nodeSize <= totalUncompressed - nodeOffset else { return nil }
+            guard position < metadata.count else { return nil }
+            let nameStart = position
+            while position < metadata.count && metadata[position] != 0 { position += 1 }
+            guard position < metadata.count else { return nil }
+            let nodePath = safe(String(decoding: metadata[nameStart..<position], as: UTF8.self))
+            position += 1
+            if emitted < 16 {
+                lines.append("unityfs_node|path=\\(nodePath)|offset=\\(nodeOffset)|size=\\(nodeSize)|flags=0x\\(String(nodeFlags, radix: 16))")
+                emitted += 1
+            }
+        }
+        if nodeCount > emitted { lines.append("unityfs_nodes_omitted|\\(nodeCount - emitted)") }
+        return lines
     }
 
     private static func read(_ handle: FileHandle, offset: UInt64, count: Int) throws -> Data {
