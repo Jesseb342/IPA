@@ -1,0 +1,144 @@
+name: Build Cuphead Native IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cuphead-native-ipa
+  cancel-in-progress: false
+
+jobs:
+  build-cuphead:
+    name: Convert Cuphead with upstream nxnative pipeline
+    runs-on: xcode-27
+    timeout-minutes: 360
+
+    steps:
+      - name: Check required private download secrets
+        shell: bash
+        env:
+          GAME_URL: ${{ secrets.Game_URL }}
+          UPDATE_URL: ${{ secrets.Update_URL }}
+          DLC_URL: ${{ secrets.DLC_URL }}
+          KEYS_URL: ${{ secrets.Keys_URL }}
+        run: |
+          set -euo pipefail
+          for name in GAME_URL UPDATE_URL DLC_URL KEYS_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing repository Actions secret: ${name/ GAME_URL/Game_URL}"
+              echo "::error::Configure Game_URL, Update_URL, DLC_URL and Keys_URL in repository Settings → Secrets and variables → Actions."
+              exit 1
+            fi
+          done
+
+      - name: Checkout upstream nxnative converter
+        uses: actions/checkout@v4
+        with:
+          repository: seedds/nxnative
+          ref: main
+          fetch-depth: 1
+
+      - name: Record upstream revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "UPSTREAM_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "Using nxnative revision $(git rev-parse HEAD)"
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install native build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install xcodegen zstd glslang
+          python -m pip install --upgrade pip
+          python -m pip install lz4 "capstone>=5,<6" fonttools nsz zbic backports.zstd
+          xcodebuild -version
+          xcodegen --version
+          dotnet --version
+          xcodebuild -downloadComponent MetalToolchain
+
+      - name: Download Cuphead base, update, DLC and keys
+        shell: bash
+        env:
+          GAME_URL: ${{ secrets.Game_URL }}
+          UPDATE_URL: ${{ secrets.Update_URL }}
+          DLC_URL: ${{ secrets.DLC_URL }}
+          KEYS_URL: ${{ secrets.Keys_URL }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/cuphead-input" "$RUNNER_TEMP/cuphead-output"
+          curl --fail --location --retry 3 --retry-all-errors "$GAME_URL" \
+            --output "$RUNNER_TEMP/cuphead-input/Cuphead-base.nsp"
+          curl --fail --location --retry 3 --retry-all-errors "$UPDATE_URL" \
+            --output "$RUNNER_TEMP/cuphead-input/Cuphead-update.nsp"
+          curl --fail --location --retry 3 --retry-all-errors "$DLC_URL" \
+            --output "$RUNNER_TEMP/cuphead-input/Cuphead-DLC.nsp"
+          printf '%s' "$KEYS_URL" | base64 --decode > "$RUNNER_TEMP/prod.keys"
+          test -s "$RUNNER_TEMP/prod.keys"
+          test -s "$RUNNER_TEMP/cuphead-input/Cuphead-base.nsp"
+          test -s "$RUNNER_TEMP/cuphead-input/Cuphead-update.nsp"
+          test -s "$RUNNER_TEMP/cuphead-input/Cuphead-DLC.nsp"
+          echo "Downloaded all three Cuphead packages. Key contents are never printed."
+
+      - name: Build Cuphead iOS IPA
+        shell: bash
+        env:
+          DM_ROOT: ${{ runner.temp }}/nxnative-work
+        run: |
+          set -euo pipefail
+          mkdir -p "$DM_ROOT"
+          python scripts/build_ipa_from_nsp.py "$RUNNER_TEMP/cuphead-input" \
+            --keys "$RUNNER_TEMP/prod.keys" \
+            --title-id 0100A5C00D162000 \
+            --platform ios \
+            --romfs separate \
+            --shader-files \
+            --progress lines \
+            --work-dir "$DM_ROOT/cuphead-work" \
+            --out "$RUNNER_TEMP/cuphead-output/Cuphead.ipa"
+
+          test -s "$RUNNER_TEMP/cuphead-output/Cuphead.ipa"
+          echo "Cuphead IPA created:"
+          ls -lh "$RUNNER_TEMP/cuphead-output/Cuphead.ipa"
+
+      - name: Upload Cuphead IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuphead-native-ipa
+          path: ${{ runner.temp }}/cuphead-output/Cuphead.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload required separate game data
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuphead-game-data
+          path: |
+            ${{ runner.temp }}/nxnative-work/cuphead-work/extract/v655360/RomFS.img
+            ${{ runner.temp }}/nxnative-work/cuphead-work/aoc/1.img
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload conversion diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuphead-conversion-diagnostics
+          path: |
+            ${{ runner.temp }}/nxnative-work/cuphead-work/logs/
+            ${{ runner.temp }}/nxnative-work/cuphead-work/shader/
+          if-no-files-found: warn
+          retention-days: 7
