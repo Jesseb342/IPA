@@ -85,6 +85,7 @@ enum UnityShaderSourceScanner {
         var serializedCandidates = 0
         var bundleCandidates = 0
         var unityFSHeaderReports = 0
+        let sampleCABURL = preparedDirectory.appendingPathComponent("unityfs-sample-CAB.bin")
         var report: [String] = [
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
@@ -138,7 +139,8 @@ enum UnityShaderSourceScanner {
                                 report.append("unityfs_bundle|\(path)|bytes=\(child.length)")
                                 let headerData = try read(handle, offset: child.offset, count: min(Int(child.length), 512))
                                 if let details = inspectUnityFSHeader(headerData, fileLength: child.length,
-                                                                            imageHandle: handle, imageOffset: child.offset) {
+                                                                            imageHandle: handle, imageOffset: child.offset,
+                                                                            sampleCABURL: unityFSHeaderReports == 0 ? sampleCABURL : nil) {
                                     for detail in details {
                                         if let separator = detail.firstIndex(of: "|") {
                                             let kind = detail[..<separator]
@@ -174,7 +176,8 @@ enum UnityShaderSourceScanner {
 
     /// Decompresses only UnityFS's small block-info metadata; bundle payload blocks remain untouched.
     private static func inspectUnityFSHeader(_ data: Data, fileLength: UInt64,
-                                             imageHandle: FileHandle, imageOffset: UInt64) -> [String]? {
+                                             imageHandle: FileHandle, imageOffset: UInt64,
+                                             sampleCABURL: URL?) -> [String]? {
         let bytes = [UInt8](data)
         guard bytes.count >= 8, Array(bytes[0..<8]) == Array("UnityFS\0".utf8) else { return nil }
         var cursor = 8
@@ -297,10 +300,15 @@ enum UnityShaderSourceScanner {
             return [headerLine, "unityfs_block_info_error|block_table_exceeds_metadata"]
         }
         var totalUncompressed: UInt64 = 0
+        var blockRecords: [(unpacked: UInt32, packed: UInt32, flags: UInt16)] = []
+        blockRecords.reserveCapacity(blockCount)
         for _ in 0..<blockCount {
-            guard let unpacked = metaBE32(position), metaBE32(position + 4) != nil else {
+            guard let unpacked = metaBE32(position), let packed = metaBE32(position + 4),
+                  position + 10 <= metadata.count else {
                 return [headerLine, "unityfs_block_info_error|truncated_block_table"]
             }
+            let blockFlags = UInt16(metadata[position + 8]) << 8 | UInt16(metadata[position + 9])
+            blockRecords.append((unpacked: unpacked, packed: packed, flags: blockFlags))
             totalUncompressed += UInt64(unpacked)
             guard totalUncompressed <= totalSize * 64 else {
                 return [headerLine, "unityfs_block_info_error|uncompressed_total_implausible"]
@@ -317,6 +325,7 @@ enum UnityShaderSourceScanner {
             "unityfs_block_info|blocks=\(blockCount)|nodes=\(nodeCount)|uncompressed_data=\(totalUncompressed)"
         ]
         var emitted = 0
+        var primaryNode: (offset: UInt64, size: UInt64, path: String)?
         for _ in 0..<nodeCount {
             guard let nodeOffset = metaBE64(position), let nodeSize = metaBE64(position + 8),
                   let nodeFlags = metaBE32(position + 16) else {
@@ -336,13 +345,103 @@ enum UnityShaderSourceScanner {
             }
             let nodePath = safe(String(decoding: metadata[nameStart..<position], as: UTF8.self))
             position += 1
+            if primaryNode == nil && !nodePath.hasSuffix(".resS") {
+                primaryNode = (nodeOffset, nodeSize, nodePath)
+            }
             if emitted < 16 {
                 lines.append("unityfs_node|path=\(nodePath)|offset=\(nodeOffset)|size=\(nodeSize)|flags=0x\(String(nodeFlags, radix: 16))")
                 emitted += 1
             }
         }
         if nodeCount > emitted { lines.append("unityfs_nodes_omitted|\(nodeCount - emitted)") }
+        if let sampleCABURL, let primaryNode,
+           primaryNode.offset == 0, primaryNode.size > 0, primaryNode.size <= 32 * 1024 * 1024 {
+            do {
+                let sample = try extractUnityFSNode(primaryNode.offset, size: primaryNode.size,
+                                                    blocks: blockRecords, dataOffset: dataOffset,
+                                                    fileLength: fileLength, imageHandle: imageHandle,
+                                                    imageOffset: imageOffset)
+                try sample.write(to: sampleCABURL, options: .atomic)
+                let signature = String(decoding: sample.prefix(8), as: UTF8.self)
+                let hex = sample.prefix(32).map { String(format: "%02x", $0) }.joined()
+                lines.append("unityfs_sample_cab|path=\(primaryNode.path)|bytes=\(sample.count)|signature=\(signature)|first32=\(hex)")
+            } catch {
+                lines.append("unityfs_sample_cab_error|\(String(describing: error).replacingOccurrences(of: "|", with: "_"))")
+            }
+        }
         return lines
+    }
+
+    private static func extractUnityFSNode(_ nodeOffset: UInt64, size: UInt64,
+                                           blocks: [(unpacked: UInt32, packed: UInt32, flags: UInt16)],
+                                           dataOffset: UInt64, fileLength: UInt64,
+                                           imageHandle: FileHandle, imageOffset: UInt64) throws -> Data {
+        guard size <= 32 * 1024 * 1024, dataOffset <= fileLength,
+              imageOffset <= UInt64.max - dataOffset else {
+            throw ScanError.invalidImage("Sample CAB extraction bounds are invalid.")
+        }
+        let nodeEnd = nodeOffset + size
+        guard nodeEnd >= nodeOffset else { throw ScanError.invalidImage("Sample CAB range overflowed.") }
+        var logicalOffset: UInt64 = 0
+        var compressedOffset = dataOffset
+        var result = Data()
+        result.reserveCapacity(Int(size))
+        for block in blocks {
+            let unpackedSize = UInt64(block.unpacked)
+            let packedSize = UInt64(block.packed)
+            guard logicalOffset <= UInt64.max - unpackedSize,
+                  compressedOffset <= fileLength, packedSize <= fileLength - compressedOffset,
+                  imageOffset <= UInt64.max - compressedOffset else {
+                throw ScanError.invalidImage("UnityFS sample block exceeds bundle bounds.")
+            }
+            let blockEnd = logicalOffset + unpackedSize
+            if blockEnd > nodeOffset && logicalOffset < nodeEnd {
+                guard unpackedSize > 0, unpackedSize <= 32 * 1024 * 1024,
+                      packedSize > 0, packedSize <= 32 * 1024 * 1024 else {
+                    throw ScanError.invalidImage("UnityFS sample block size is unsafe.")
+                }
+                let packed = try read(imageHandle, offset: imageOffset + compressedOffset, count: Int(packedSize))
+                guard packed.count == Int(packedSize) else {
+                    throw ScanError.invalidImage("UnityFS sample block could not be read completely.")
+                }
+                let compression = block.flags & 0x3F
+                let decoded: Data
+                if compression == 0 {
+                    guard packed.count == Int(unpackedSize) else {
+                        throw ScanError.invalidImage("Uncompressed UnityFS block size mismatch.")
+                    }
+                    decoded = packed
+                } else if compression == 2 || compression == 3 {
+                    var output = Data(count: Int(unpackedSize))
+                    let decodedCount = output.withUnsafeMutableBytes { destination in
+                        packed.withUnsafeBytes { source in
+                            guard let dst = destination.bindMemory(to: UInt8.self).baseAddress,
+                                  let src = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+                            return compression_decode_buffer(dst, Int(unpackedSize), src,
+                                                              Int(packedSize), nil, COMPRESSION_LZ4_RAW)
+                        }
+                    }
+                    guard decodedCount == Int(unpackedSize) else {
+                        throw ScanError.invalidImage("UnityFS raw LZ4 block decode failed.")
+                    }
+                    decoded = output
+                } else {
+                    throw ScanError.invalidImage("Unsupported UnityFS sample block compression \(compression).")
+                }
+                let overlapStart = max(nodeOffset, logicalOffset)
+                let overlapEnd = min(nodeEnd, blockEnd)
+                let start = Int(overlapStart - logicalOffset)
+                let end = Int(overlapEnd - logicalOffset)
+                result.append(decoded.subdata(in: start..<end))
+                if UInt64(result.count) == size { break }
+            }
+            logicalOffset = blockEnd
+            compressedOffset += packedSize
+        }
+        guard UInt64(result.count) == size else {
+            throw ScanError.invalidImage("Sample CAB extraction was incomplete (\(result.count)/\(size) bytes).")
+        }
+        return result
     }
 
     private static func read(_ handle: FileHandle, offset: UInt64, count: Int) throws -> Data {
