@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-09T06:48:26Z",
+  "generatedAt": "2026-11-09T22:28:31Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "110a6439e7e0c3dc05ebf64160cbbcad1ead89f2",
+    "commit": "790eb480828d3404638ee9c7ade05001fe11e7dc",
     "profilesPath": "dm/games"
   },
   "count": 154,
