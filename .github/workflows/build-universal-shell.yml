@@ -188,10 +188,9 @@ jobs:
 
       - name: Probe Ryujinx shader translator as an iOS NativeAOT library
         id: shader_translator_probe
-        continue-on-error: true
         shell: bash
         run: |
-          set -uo pipefail
+          set -euo pipefail
           PROBE_ROOT="$RUNNER_TEMP/nxn-shader-translator"
           PUBLISH="$PROBE_ROOT/publish"
           LOG="$PROBE_ROOT/publish.log"
@@ -218,8 +217,36 @@ jobs:
           fi
           nm -gU "$DYLIB" | grep -q '_nxn_translate_shader_jobs'
           nm -gU "$DYLIB" | grep -q '_nxn_shader_translator_probe'
-          echo "Ryujinx translator linked into an iOS ARM64 NativeAOT library:"
-          ls -lh "$DYLIB"
+
+          # iOS expects third-party dynamic code inside a framework bundle,
+          # not as a loose .dylib in the app. Wrap the NativeAOT output now;
+          # the app will load it from Frameworks in a later Swift bridge step.
+          FRAMEWORK="$PROBE_ROOT/NxNativeShaderTranslator.framework"
+          mkdir -p "$FRAMEWORK"
+          cp "$DYLIB" "$FRAMEWORK/NxNativeShaderTranslator"
+          install_name_tool -id \
+            @rpath/NxNativeShaderTranslator.framework/NxNativeShaderTranslator \
+            "$FRAMEWORK/NxNativeShaderTranslator"
+          cat > "$FRAMEWORK/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>NxNativeShaderTranslator</string>
+            <key>CFBundleIdentifier</key><string>org.nxnative.shader-translator</string>
+            <key>CFBundleName</key><string>NxNativeShaderTranslator</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>MinimumOSVersion</key><string>15.0</string>
+          </dict>
+          </plist>
+          PLIST
+          file "$FRAMEWORK/NxNativeShaderTranslator" | grep -q 'Mach-O 64-bit arm64'
+          nm -gU "$FRAMEWORK/NxNativeShaderTranslator" | grep -q '_nxn_translate_shader_jobs'
+          nm -gU "$FRAMEWORK/NxNativeShaderTranslator" | grep -q '_nxn_shader_translator_probe'
+          echo "Ryujinx translator built and wrapped as an iOS ARM64 framework:"
+          ls -lh "$FRAMEWORK/NxNativeShaderTranslator"
+          otool -L "$FRAMEWORK/NxNativeShaderTranslator"
 
       - name: Upload shader translator NativeAOT probe diagnostics
         if: always()
@@ -284,6 +311,15 @@ jobs:
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nso'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_rewrite_nso'
 
+          # Embed the Ryujinx NativeAOT translator as a real iOS framework.
+          TRANSLATOR_FRAMEWORK="$FRAMEWORKS/NxNativeShaderTranslator.framework"
+          SOURCE_TRANSLATOR="$RUNNER_TEMP/nxn-shader-translator/NxNativeShaderTranslator.framework"
+          test -s "$SOURCE_TRANSLATOR/NxNativeShaderTranslator"
+          cp -R "$SOURCE_TRANSLATOR" "$TRANSLATOR_FRAMEWORK"
+          test -s "$TRANSLATOR_FRAMEWORK/Info.plist"
+          nm -gU "$TRANSLATOR_FRAMEWORK/NxNativeShaderTranslator" | grep -q '_nxn_translate_shader_jobs'
+          nm -gU "$TRANSLATOR_FRAMEWORK/NxNativeShaderTranslator" | grep -q '_nxn_shader_translator_probe'
+
           ARM64_FRAMEWORK="$FRAMEWORKS/NxNativeArm64.framework"
           cp -R "$RUNNER_TEMP/NxNativeArm64.framework" "$ARM64_FRAMEWORK"
           test -s "$ARM64_FRAMEWORK/NxNativeArm64"
@@ -294,6 +330,7 @@ jobs:
 
           # Sign both nested frameworks before re-signing the containing app.
           codesign --force --sign - --timestamp=none "$ARM64_FRAMEWORK"
+          codesign --force --sign - --timestamp=none "$TRANSLATOR_FRAMEWORK"
           codesign --force --sign - --timestamp=none "$FRAMEWORK"
           codesign --force --sign - --timestamp=none \
             --entitlements dm/ios/DmIOS.entitlements "$APP"
@@ -309,8 +346,8 @@ jobs:
           zip -qry nxnative-shell-build-input.zip Payload
           rm -rf Payload
           unzip -t nxnative-shell-build-input.zip >/dev/null
-          echo "Embedded and signed NxNativeMetadataProbe.framework."
-          ls -lh "$FRAMEWORK/NxNativeMetadataProbe"
+          echo "Embedded and signed the LibHac, Capstone, and Ryujinx translator frameworks."
+          ls -lh "$FRAMEWORK/NxNativeMetadataProbe" "$TRANSLATOR_FRAMEWORK/NxNativeShaderTranslator"
 
       - name: Package shell as an IPA for sideload testing
         shell: bash
@@ -379,14 +416,23 @@ jobs:
             echo "::error::The LibHac metadata framework is missing from the app."
             exit 1
           }
-          if find "$APP/Frameworks" -mindepth 1 -maxdepth 1 ! -name 'NxNativeMetadataProbe.framework' ! -name 'NxNativeArm64.framework' | grep -q .; then
+          test -s "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator" || {
+            echo "::error::The Ryujinx shader translator framework is missing from the app."
+            exit 1
+          }
+          nm -gU "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator" | grep -q '_nxn_translate_shader_jobs'
+          nm -gU "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator" | grep -q '_nxn_shader_translator_probe'
+          if find "$APP/Frameworks" -mindepth 1 -maxdepth 1 ! -name 'NxNativeMetadataProbe.framework' ! -name 'NxNativeArm64.framework' ! -name 'NxNativeShaderTranslator.framework' | grep -q .; then
             echo "::error::Unexpected framework or game module found in the shell."
             exit 1
           fi
           codesign --verify --deep --strict "$APP"
           echo "Shell metadata:"
           cat "$APP/dm/shell_info.txt"
+          echo "Embedded translator framework:"
+          file "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator"
           echo "Shell file count: $(find "$APP" -type f | wc -l | tr -d ' ')"
+
 
       - name: Upload universal shell build input
         uses: actions/upload-artifact@v4
