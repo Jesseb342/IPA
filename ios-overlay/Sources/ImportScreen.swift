@@ -4,6 +4,78 @@ import UniformTypeIdentifiers
 
 import Darwin
 
+
+private enum ShaderTranslatorBridge {
+    typealias TranslateFunction = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> Int32
+    typealias ProbeFunction = @convention(c) () -> Int32
+    private static let lock = NSLock()
+    private static var frameworkHandle: UnsafeMutableRawPointer?
+    private static var translateFunction: TranslateFunction?
+    private static var probeFunction: ProbeFunction?
+
+    private static func loadFunctions() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        if translateFunction != nil && probeFunction != nil { return }
+        let binary = Bundle.main.bundleURL.appendingPathComponent("Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator")
+        guard FileManager.default.fileExists(atPath: binary.path) else { throw ShaderTranslatorError.frameworkMissing }
+        guard let handle = dlopen(binary.path, RTLD_NOW | RTLD_LOCAL) else {
+            let detail = dlerror().map { String(cString: $0) } ?? "unknown loader error"
+            throw ShaderTranslatorError.loadFailed(detail)
+        }
+        guard let translateSymbol = dlsym(handle, "nxn_translate_shader_jobs"),
+              let probeSymbol = dlsym(handle, "nxn_shader_translator_probe") else {
+            let detail = dlerror().map { String(cString: $0) } ?? "required symbol not found"
+            dlclose(handle)
+            throw ShaderTranslatorError.symbolMissing(detail)
+        }
+        frameworkHandle = handle
+        translateFunction = unsafeBitCast(translateSymbol, to: TranslateFunction.self)
+        probeFunction = unsafeBitCast(probeSymbol, to: ProbeFunction.self)
+    }
+
+    static func probe() throws {
+        try loadFunctions()
+        guard let probe = probeFunction, probe() == 1 else { throw ShaderTranslatorError.probeFailed }
+    }
+
+    // The job and output paths must stay inside this app's Documents folder.
+    static func translate(jobFileURL: URL, outputDirectoryURL: URL) throws {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].standardizedFileURL.path + "/"
+        let jobPath = jobFileURL.standardizedFileURL.path
+        let outputPath = outputDirectoryURL.standardizedFileURL.path
+        guard jobPath.hasPrefix(documents), outputPath.hasPrefix(documents) else { throw ShaderTranslatorError.pathOutsideSandbox }
+        guard FileManager.default.fileExists(atPath: jobPath) else { throw ShaderTranslatorError.jobFileMissing }
+        try FileManager.default.createDirectory(at: outputDirectoryURL, withIntermediateDirectories: true)
+        try loadFunctions()
+        guard let translate = translateFunction else { throw ShaderTranslatorError.probeFailed }
+        let result = jobPath.withCString { jp in outputPath.withCString { op in translate(jp, op) } }
+        guard result == 0 else { throw ShaderTranslatorError.translationFailed(result) }
+    }
+}
+
+private enum ShaderTranslatorError: LocalizedError {
+    case frameworkMissing
+    case loadFailed(String)
+    case symbolMissing(String)
+    case probeFailed
+    case pathOutsideSandbox
+    case jobFileMissing
+    case translationFailed(Int32)
+
+    var errorDescription: String? {
+        switch self {
+        case .frameworkMissing: return "The embedded shader-translator framework is missing."
+        case .loadFailed(let detail): return "Could not load the shader translator: \\(detail)"
+        case .symbolMissing(let detail): return "The translator is missing a required function: \\(detail)"
+        case .probeFailed: return "The shader translator did not pass its initialization check."
+        case .pathOutsideSandbox: return "Shader jobs and output must stay inside the app's Documents folder."
+        case .jobFileMissing: return "The local shader-job file could not be found."
+        case .translationFailed(let code): return "Shader translation failed (code \\(code))."
+        }
+    }
+}
+
 private struct NSPContentRecord: Sendable {
     let type: String
     let titleID: String
