@@ -1282,16 +1282,19 @@ private struct ImportScreenView: View {
                         .disabled(testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
                     }
 
-                    if gameExtracted {
-                        Button {
-                            Task { await testShaderTranslator() }
-                        } label: {
-                            Label("Test Shader Translator", systemImage: "square.stack.3d.up")
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(testingShaderTranslator || testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
+                    Button {
+                        Task { await testShaderTranslator() }
+                    } label: {
+                        Label("Test Shader Translator", systemImage: "square.stack.3d.up")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!gameExtracted || testingShaderTranslator || testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
+                    if !gameExtracted {
+                        Text("Extract a game first to enable the on-device shader translator test.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                     if testingShaderTranslator {
                         HStack(spacing: 10) {
@@ -1940,6 +1943,17 @@ private struct ImportScreenView: View {
         }
         noUpdateSelected = defaults.bool(forKey: "nxn.import.noUpdate")
         dlcSelectionFinished = defaults.bool(forKey: "nxn.import.dlcFinished")
+
+        // Restore the extracted-game state after an app restart or update.
+        // The prepared files live in Documents, while @State is reset on launch.
+        let prepared = documents.appendingPathComponent("PreparedGame", isDirectory: true)
+        let manifest = prepared.appendingPathComponent("extraction-manifest.txt")
+        let exefs = prepared.appendingPathComponent("ExeFS", isDirectory: true)
+        gameExtracted = FileManager.default.fileExists(atPath: manifest.path)
+            && FileManager.default.fileExists(atPath: exefs.path)
+        if gameExtracted {
+            status = "Previously extracted game found in Documents/PreparedGame."
+        }
         if keys != nil { Task { await verifySavedContent() } }
     }
 
