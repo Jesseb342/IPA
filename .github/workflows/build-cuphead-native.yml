@@ -28,7 +28,7 @@ jobs:
           set -euo pipefail
           for name in GAME_URL UPDATE_URL DLC_URL KEYS_URL; do
             if [ -z "${!name}" ]; then
-              echo "::error::Missing repository Actions secret: ${name/ GAME_URL/Game_URL}"
+              echo "::error::One or more required repository Actions secrets are missing."
               echo "::error::Configure Game_URL, Update_URL, DLC_URL and Keys_URL in repository Settings → Secrets and variables → Actions."
               exit 1
             fi
@@ -86,7 +86,7 @@ jobs:
             --output "$RUNNER_TEMP/cuphead-input/Cuphead-update.nsp"
           curl --fail --location --retry 3 --retry-all-errors "$DLC_URL" \
             --output "$RUNNER_TEMP/cuphead-input/Cuphead-DLC.nsp"
-          printf '%s' "$KEYS_URL" | base64 --decode > "$RUNNER_TEMP/prod.keys"
+          printf '%s' "$KEYS_URL" | base64 -D > "$RUNNER_TEMP/prod.keys"
           test -s "$RUNNER_TEMP/prod.keys"
           test -s "$RUNNER_TEMP/cuphead-input/Cuphead-base.nsp"
           test -s "$RUNNER_TEMP/cuphead-input/Cuphead-update.nsp"
