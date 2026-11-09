@@ -1075,6 +1075,8 @@ private struct ImportScreenView: View {
     @State private var encoderTestLog = ""
     @State private var testingMetalCompiler = false
     @State private var metalCompilerLog = ""
+    @State private var testingShaderTranslator = false
+    @State private var shaderTranslatorLog = ""
     @State private var disassemblingModules = false
     @State private var disassemblyLog = ""
     @State private var functionOffset = "00000038"
@@ -1278,6 +1280,31 @@ private struct ImportScreenView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
+                    }
+
+                    if gameExtracted {
+                        Button {
+                            Task { await testShaderTranslator() }
+                        } label: {
+                            Label("Test Shader Translator", systemImage: "square.stack.3d.up")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(testingShaderTranslator || testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
+                    }
+                    if testingShaderTranslator {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Loading the on-device shader translator…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if !shaderTranslatorLog.isEmpty {
+                        Text(shaderTranslatorLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
                     if testingMetalCompiler {
                         HStack(spacing: 10) {
@@ -1709,6 +1736,22 @@ private struct ImportScreenView: View {
             rewriteLog = report + "\nOutput: Documents/PreparedGame/RewrittenExeFS\nOriginal ExeFS was left unchanged. No game-specific patches were applied in this test."
         } catch {
             rewriteLog = "Rewrite failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func testShaderTranslator() async {
+        testingShaderTranslator = true
+        shaderTranslatorLog = ""
+        defer { testingShaderTranslator = false }
+
+        do {
+            let result = try await Task.detached(priority: .userInitiated) {
+                try ShaderTranslatorBridge.probe()
+                return "success|The Ryujinx shader translator loaded on this iPhone and passed its native probe.\\nnext|Ready for the first real Cuphead shader translation test."
+            }.value
+            shaderTranslatorLog = result
+        } catch {
+            shaderTranslatorLog = "failed|The shader translator could not initialize: \\(error.localizedDescription)"
         }
     }
 
