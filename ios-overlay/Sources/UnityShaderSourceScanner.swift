@@ -140,7 +140,11 @@ enum UnityShaderSourceScanner {
                                 if let details = inspectUnityFSHeader(headerData, fileLength: child.length,
                                                                             imageHandle: handle, imageOffset: child.offset) {
                                     for detail in details {
-                                        report.append("\(detail.hasPrefix("unityfs_header|") ? detail : detail.replacingOccurrences(of: "unityfs_", with: "unityfs_\(path)|"))")
+                                        if let separator = detail.firstIndex(of: "|") {
+                                            let kind = detail[..<separator]
+                                            let values = detail[detail.index(after: separator)...]
+                                            report.append("\(kind)|\(path)|\(values)")
+                                        }
                                     }
                                 } else {
                                     report.append("unityfs_header_error|\(path)|header_truncated_or_invalid")
