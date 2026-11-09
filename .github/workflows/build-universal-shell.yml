@@ -279,6 +279,7 @@ jobs:
           grep -q 'enum OnDeviceMetalCompiler' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'enum UnityShaderSourceScanner' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'Scan Unity Shader Sources' dm/ios/Sources/ImportScreen.swift
+          swiftc -frontend -parse dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'enum ShaderTranslatorBridge' dm/ios/Sources/ImportScreen.swift
           grep -q 'nxn_translate_shader_jobs' dm/ios/Sources/ImportScreen.swift
           grep -q 'Test Shader Translator' dm/ios/Sources/ImportScreen.swift
