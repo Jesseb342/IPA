@@ -1662,11 +1662,11 @@ private struct ImportScreenView: View {
                     source: source,
                     functionName: "nxn_on_device_smoke_test"
                 )
-                return "success|Metal compiled the test shader and created a compute pipeline.\nthread_execution_width|\\(pipeline.threadExecutionWidth)\nmax_total_threads_per_threadgroup|\\(pipeline.maxTotalThreadsPerThreadgroup)"
+                return "success|Metal compiled the test shader and created a compute pipeline.\nthread_execution_width|\(pipeline.threadExecutionWidth)\nmax_total_threads_per_threadgroup|\(pipeline.maxTotalThreadsPerThreadgroup)"
             }.value
             metalCompilerLog = result
         } catch {
-            metalCompilerLog = "failed|On-device Metal compilation failed: \\(error.localizedDescription)"
+            metalCompilerLog = "failed|On-device Metal compilation failed: \(error.localizedDescription)"
         }
     }
 
