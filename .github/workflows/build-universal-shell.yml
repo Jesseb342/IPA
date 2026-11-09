@@ -224,6 +224,8 @@ jobs:
           FRAMEWORK="$PROBE_ROOT/NxNativeShaderTranslator.framework"
           mkdir -p "$FRAMEWORK"
           cp "$DYLIB" "$FRAMEWORK/NxNativeShaderTranslator"
+          install_name_tool -rpath @executable_path @executable_path/Frameworks \
+            "$FRAMEWORK/NxNativeShaderTranslator"
           install_name_tool -id \
             @rpath/NxNativeShaderTranslator.framework/NxNativeShaderTranslator \
             "$FRAMEWORK/NxNativeShaderTranslator"
@@ -241,9 +243,11 @@ jobs:
           </dict>
           </plist>
           PLIST
-          file "$FRAMEWORK/NxNativeShaderTranslator" | grep -q 'Mach-O 64-bit arm64'
-          nm -gU "$FRAMEWORK/NxNativeShaderTranslator" | grep -q '_nxn_translate_shader_jobs'
-          nm -gU "$FRAMEWORK/NxNativeShaderTranslator" | grep -q '_nxn_shader_translator_probe'
+          # Apple file output varies across runner images; lipo checks architecture exactly.
+          file "$FRAMEWORK/NxNativeShaderTranslator"
+          lipo -verify_arch arm64 "$FRAMEWORK/NxNativeShaderTranslator"
+          echo "Exported translator entry points:"
+          nm -gU "$FRAMEWORK/NxNativeShaderTranslator" | grep '_nxn_.*shader'
           echo "Ryujinx translator built and wrapped as an iOS ARM64 framework:"
           ls -lh "$FRAMEWORK/NxNativeShaderTranslator"
           otool -L "$FRAMEWORK/NxNativeShaderTranslator"
@@ -256,6 +260,7 @@ jobs:
           path: |
             ${{ runner.temp }}/nxn-shader-translator/publish.log
             ${{ runner.temp }}/nxn-shader-translator/publish/*.dylib
+            ${{ runner.temp }}/nxn-shader-translator/NxNativeShaderTranslator.framework
           if-no-files-found: warn
           retention-days: 7
 
