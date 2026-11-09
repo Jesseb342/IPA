@@ -83,7 +83,9 @@ enum UnityShaderSourceScanner {
         var unityFSCount = 0
         var serializedCandidates = 0
         var bundleCandidates = 0
+        var unityFSHeaderReports = 0
         var report: [String] = [
+            "unityfs_inspection|header_only_no_decompression",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
             "index_entries|\(count)",
@@ -151,6 +153,73 @@ enum UnityShaderSourceScanner {
         try output.write(to: preparedDirectory.appendingPathComponent("shader-source-scan.txt"),
                          atomically: true, encoding: .utf8)
         return output
+    }
+
+    /// Parses only the UnityFS container header. It deliberately does not decompress block info or payloads.
+    private static func inspectUnityFSHeader(_ data: Data, fileLength: UInt64) -> String? {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 8, Array(bytes[0..<8]) == Array("UnityFS\\0".utf8) else { return nil }
+        var cursor = 8
+
+        func readBE32(_ p: Int) -> UInt32? {
+            guard p >= 0, p + 4 <= bytes.count else { return nil }
+            return (UInt32(bytes[p]) << 24) | (UInt32(bytes[p + 1]) << 16) |
+                   (UInt32(bytes[p + 2]) << 8) | UInt32(bytes[p + 3])
+        }
+        func readBE64(_ p: Int) -> UInt64? {
+            guard p >= 0, p + 8 <= bytes.count else { return nil }
+            return (UInt64(bytes[p]) << 56) | (UInt64(bytes[p + 1]) << 48) |
+                   (UInt64(bytes[p + 2]) << 40) | (UInt64(bytes[p + 3]) << 32) |
+                   (UInt64(bytes[p + 4]) << 24) | (UInt64(bytes[p + 5]) << 16) |
+                   (UInt64(bytes[p + 6]) << 8) | UInt64(bytes[p + 7])
+        }
+        func readCString() -> String? {
+            guard cursor < bytes.count else { return nil }
+            let start = cursor
+            while cursor < bytes.count && bytes[cursor] != 0 { cursor += 1 }
+            guard cursor < bytes.count else { return nil }
+            let value = String(decoding: bytes[start..<cursor], as: UTF8.self)
+            cursor += 1
+            return value
+        }
+
+        guard let format = readBE32(cursor) else { return nil }
+        cursor += 4
+        guard let playerVersion = readCString(), let engineVersion = readCString() else { return nil }
+        guard let totalSize = readBE64(cursor) else { return nil }
+        cursor += 8
+        guard let compressedInfo = readBE32(cursor) else { return nil }
+        cursor += 4
+        guard let uncompressedInfo = readBE32(cursor) else { return nil }
+        cursor += 4
+        guard let flags = readBE32(cursor) else { return nil }
+        cursor += 4
+
+        let infoAtEnd = (flags & 0x80) != 0
+        let compression = flags & 0x3F
+        let compressionName: String
+        switch compression {
+        case 0: compressionName = "none"
+        case 1: compressionName = "lzma"
+        case 2: compressionName = "lz4"
+        case 3: compressionName = "lz4hc"
+        default: compressionName = "unknown_\\(compression)"
+        }
+        let headerSize = UInt64(cursor)
+        guard totalSize > 0, totalSize <= fileLength,
+              UInt64(compressedInfo) <= totalSize,
+              UInt64(uncompressedInfo) <= 256 * 1024 * 1024 else { return nil }
+        let infoOffset = infoAtEnd ? totalSize - UInt64(compressedInfo) : headerSize
+        let dataOffset = infoAtEnd ? headerSize : headerSize + UInt64(compressedInfo)
+        guard infoOffset <= totalSize, UInt64(compressedInfo) <= totalSize - infoOffset,
+              dataOffset <= totalSize else { return nil }
+
+        func safe(_ value: String) -> String {
+            value.replacingOccurrences(of: "|", with: "_")
+                 .replacingOccurrences(of: "\\n", with: " ")
+                 .replacingOccurrences(of: "\\r", with: " ")
+        }
+        return "format=\\(format)|player=\\(safe(playerVersion))|engine=\\(safe(engineVersion))|total=\\(totalSize)|header=\\(headerSize)|info_compressed=\\(compressedInfo)|info_uncompressed=\\(uncompressedInfo)|info_compression=\\(compressionName)|info_at_end=\\(infoAtEnd)|info_offset=\\(infoOffset)|data_offset=\\(dataOffset)|flags=0x\\(String(flags, radix: 16))"
     }
 
     private static func read(_ handle: FileHandle, offset: UInt64, count: Int) throws -> Data {
