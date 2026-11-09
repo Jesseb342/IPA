@@ -176,7 +176,7 @@ enum UnityShaderSourceScanner {
     private static func inspectUnityFSHeader(_ data: Data, fileLength: UInt64,
                                              imageHandle: FileHandle, imageOffset: UInt64) -> [String]? {
         let bytes = [UInt8](data)
-        guard bytes.count >= 8, Array(bytes[0..<8]) == Array("UnityFS\\0".utf8) else { return nil }
+        guard bytes.count >= 8, Array(bytes[0..<8]) == Array("UnityFS\0".utf8) else { return nil }
         var cursor = 8
 
         func readBE32(_ p: Int) -> UInt32? {
@@ -202,8 +202,8 @@ enum UnityShaderSourceScanner {
         }
         func safe(_ value: String) -> String {
             value.replacingOccurrences(of: "|", with: "_")
-                 .replacingOccurrences(of: "\\n", with: " ")
-                 .replacingOccurrences(of: "\\r", with: " ")
+                 .replacingOccurrences(of: "\n", with: " ")
+                 .replacingOccurrences(of: "\r", with: " ")
         }
 
         guard let format = readBE32(cursor) else { return nil }
@@ -226,7 +226,7 @@ enum UnityShaderSourceScanner {
         case 1: compressionName = "lzma"
         case 2: compressionName = "lz4"
         case 3: compressionName = "lz4hc"
-        default: compressionName = "unknown_\\(compression)"
+        default: compressionName = "unknown_\(compression)"
         }
         let headerSize = UInt64(cursor)
         guard format == 6, totalSize > 0, totalSize <= fileLength,
@@ -258,8 +258,8 @@ enum UnityShaderSourceScanner {
             decoded = output
         default:
             return [
-                "unityfs_header|format=\\(format)|player=\\(safe(playerVersion))|engine=\\(safe(engineVersion))|total=\\(totalSize)|header=\\(headerSize)|info_compressed=\\(compressedInfo)|info_uncompressed=\\(uncompressedInfo)|info_compression=\\(compressionName)|info_at_end=\\(infoAtEnd)|info_offset=\\(infoOffset)|data_offset=\\(dataOffset)|flags=0x\\(String(flags, radix: 16))",
-                "unityfs_block_info_error|unsupported_compression_\\(compressionName)"
+                "unityfs_header|format=\(format)|player=\(safe(playerVersion))|engine=\(safe(engineVersion))|total=\(totalSize)|header=\(headerSize)|info_compressed=\(compressedInfo)|info_uncompressed=\(uncompressedInfo)|info_compression=\(compressionName)|info_at_end=\(infoAtEnd)|info_offset=\(infoOffset)|data_offset=\(dataOffset)|flags=0x\(String(flags, radix: 16))",
+                "unityfs_block_info_error|unsupported_compression_\(compressionName)"
             ]
         }
 
@@ -291,8 +291,8 @@ enum UnityShaderSourceScanner {
         position += 4
         let nodeCount = Int(nodeCountRaw)
         var lines = [
-            "unityfs_header|format=\\(format)|player=\\(safe(playerVersion))|engine=\\(safe(engineVersion))|total=\\(totalSize)|header=\\(headerSize)|info_compressed=\\(compressedInfo)|info_uncompressed=\\(uncompressedInfo)|info_compression=\\(compressionName)|info_at_end=\\(infoAtEnd)|info_offset=\\(infoOffset)|data_offset=\\(dataOffset)|flags=0x\\(String(flags, radix: 16))",
-            "unityfs_block_info|blocks=\\(blockCount)|nodes=\\(nodeCount)|uncompressed_data=\\(totalUncompressed)"
+            "unityfs_header|format=\(format)|player=\(safe(playerVersion))|engine=\(safe(engineVersion))|total=\(totalSize)|header=\(headerSize)|info_compressed=\(compressedInfo)|info_uncompressed=\(uncompressedInfo)|info_compression=\(compressionName)|info_at_end=\(infoAtEnd)|info_offset=\(infoOffset)|data_offset=\(dataOffset)|flags=0x\(String(flags, radix: 16))",
+            "unityfs_block_info|blocks=\(blockCount)|nodes=\(nodeCount)|uncompressed_data=\(totalUncompressed)"
         ]
         var emitted = 0
         for _ in 0..<nodeCount {
@@ -307,11 +307,11 @@ enum UnityShaderSourceScanner {
             let nodePath = safe(String(decoding: metadata[nameStart..<position], as: UTF8.self))
             position += 1
             if emitted < 16 {
-                lines.append("unityfs_node|path=\\(nodePath)|offset=\\(nodeOffset)|size=\\(nodeSize)|flags=0x\\(String(nodeFlags, radix: 16))")
+                lines.append("unityfs_node|path=\(nodePath)|offset=\(nodeOffset)|size=\(nodeSize)|flags=0x\(String(nodeFlags, radix: 16))")
                 emitted += 1
             }
         }
-        if nodeCount > emitted { lines.append("unityfs_nodes_omitted|\\(nodeCount - emitted)") }
+        if nodeCount > emitted { lines.append("unityfs_nodes_omitted|\(nodeCount - emitted)") }
         return lines
     }
 
