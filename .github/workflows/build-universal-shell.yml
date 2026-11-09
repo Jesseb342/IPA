@@ -278,6 +278,8 @@ jobs:
           grep -q 'enum OnDeviceMetalCompiler' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'enum ShaderTranslatorBridge' dm/ios/Sources/ImportScreen.swift
           grep -q 'nxn_translate_shader_jobs' dm/ios/Sources/ImportScreen.swift
+          grep -q 'Test Shader Translator' dm/ios/Sources/ImportScreen.swift
+          grep -q 'ShaderTranslatorBridge.probe()' dm/ios/Sources/ImportScreen.swift
           grep -q 'makeLibrary(source: source, options: options)' dm/ios/Sources/OnDeviceMetalCompiler.swift
           echo "IPA import UI overlay applied."
 
