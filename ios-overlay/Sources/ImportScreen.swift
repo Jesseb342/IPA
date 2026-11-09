@@ -1112,6 +1112,37 @@ private struct ImportScreenView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    VStack(alignment: .leading, spacing: 10) {
+                        Button {
+                            Task { await scanUnityShaderSources() }
+                        } label: {
+                            Label("Scan Unity Shader Sources", systemImage: "doc.text.magnifyingglass")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!gameExtracted || scanningShaderSources || extracting)
+
+                        if !gameExtracted {
+                            Text("Extract the game below first. This scan button stays here so it is easy to find.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        if scanningShaderSources {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text("Scanning the extracted game index…").foregroundStyle(.secondary)
+                            }
+                        }
+                        if !shaderSourceScanLog.isEmpty {
+                            Text(shaderSourceScanLog)
+                                .font(.system(.caption2, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+
                     fileSection(
                         title: "Step 1 · prod.keys",
                         subtitle: "Start here. No game files can be selected until this file is imported."
@@ -1222,28 +1253,6 @@ private struct ImportScreenView: View {
                         Text("The selected DLC packages will be extracted into Documents/PreparedGame/aoc as indexed RomFS images.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    }
-
-                    Button {
-                        Task { await scanUnityShaderSources() }
-                    } label: {
-                        Label("Scan Unity Shader Sources", systemImage: "doc.text.magnifyingglass")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!gameExtracted || scanningShaderSources || testingShaderTranslator || extracting)
-                    if scanningShaderSources {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text("Scanning the extracted game index…").foregroundStyle(.secondary)
-                        }
-                    }
-                    if !shaderSourceScanLog.isEmpty {
-                        Text(shaderSourceScanLog)
-                            .font(.system(.caption2, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
                     }
 
                     Button {
