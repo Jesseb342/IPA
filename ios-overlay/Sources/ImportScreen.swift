@@ -1780,7 +1780,7 @@ private struct ImportScreenView: View {
             }.value
             shaderSourceScanLog = report
         } catch {
-            shaderSourceScanLog = "scan_failed|\\(error.localizedDescription)"
+            shaderSourceScanLog = "scan_failed|\(error.localizedDescription)"
         }
     }
 
