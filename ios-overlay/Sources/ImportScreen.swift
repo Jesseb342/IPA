@@ -1222,6 +1222,21 @@ private struct ImportScreenView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    Button {
+                        Task { await testShaderTranslator() }
+                    } label: {
+                        Label("Test Shader Translator", systemImage: "square.stack.3d.up")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!gameExtracted || testingShaderTranslator || testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
+                    if !gameExtracted {
+                        Text("Extract a game first to enable this test.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
                     if gameExtracted {
                         Button {
                             Task { await inspectGameModules() }
@@ -1280,21 +1295,6 @@ private struct ImportScreenView: View {
                         }
                         .buttonStyle(.bordered)
                         .disabled(testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
-                    }
-
-                    Button {
-                        Task { await testShaderTranslator() }
-                    } label: {
-                        Label("Test Shader Translator", systemImage: "square.stack.3d.up")
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!gameExtracted || testingShaderTranslator || testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
-                    if !gameExtracted {
-                        Text("Extract a game first to enable the on-device shader translator test.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
                     if testingShaderTranslator {
                         HStack(spacing: 10) {
