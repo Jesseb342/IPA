@@ -111,7 +111,7 @@ enum UnityShaderSourceScanner {
                     let ext = URL(fileURLWithPath: lower).pathExtension
                     let inData = lower.hasPrefix("data/")
                     let inStreaming = lower.contains("/streamingassets/") || lower.hasPrefix("streamingassets/")
-                    let serialized = inData && ["assets", "resource", "ress", "dat"].contains(ext)
+                    let serialized = inData && !inStreaming && ext != "meta"
                     let likelyBundle = inStreaming || ["bundle", "unity3d", "assetbundle"].contains(ext)
                     if serialized {
                         serializedCandidates += 1
@@ -127,7 +127,7 @@ enum UnityShaderSourceScanner {
                     }
 
                     // UnityFS magic is checked by reading only eight bytes from each plausible bundle.
-                    if likelyBundle && child.length >= 8 {
+                    if (likelyBundle || inData) && child.length >= 8 {
                         let signature = try read(handle, offset: child.offset, count: 8)
                         if signature == Data("UnityFS\0".utf8) {
                             unityFSCount += 1
