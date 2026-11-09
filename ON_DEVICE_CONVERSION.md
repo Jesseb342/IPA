@@ -12,6 +12,7 @@ The app's file picker remains the only source of game packages and keys. Importe
 - The LibHac NativeAOT framework is packaged in the app. Its metadata inspection and NSP/DLC extraction exports are called by the app using local file paths.
 - The Capstone AArch64 framework is packaged in the app and performs local disassembly and analysis.
 - The current NSO rewriter is also packaged in the app and runs locally. With an empty patch manifest, it decompresses/rebuilds NSO containers and verifies segment hashes. It does **not** yet apply the game-specific or general Switch-to-Apple compatibility rewrites needed to make a game runnable.
+- A native Swift Metal compiler component is now included in the app. It accepts MSL text and asks the iPhone's Metal driver to compile it locally. The import screen includes a compute-shader smoke test. This validates the device-side MSL compilation endpoint; it is not yet the Switch shader translator.
 - The current UI exposes extraction, NSO rewriting, and diagnostic controls. It is not yet the finished one-button converter.
 - The universal-shell workflow builds a game-free app and its embedded native libraries. It is a development/distribution build only, not a game conversion service.
 
@@ -20,7 +21,7 @@ The app's file picker remains the only source of game packages and keys. Importe
 1. **Import and validate** — already implemented for prod.keys, base NSP, optional update, and DLC.
 2. **Extract locally** — already implemented through the embedded LibHac NativeAOT framework.
 3. **Rewrite executable modules locally** — current code only performs lossless NSO decompression/repacking and optional exact-match patches. Port/adapt the complete upstream rewrite rules and runtime compatibility transformations, then verify every output module.
-4. **Extract and translate shaders locally** — port the shader discovery/splitting logic and shader translation dependencies so the iPhone can produce the Metal shader assets without a remote compiler.
+4. **Extract and translate shaders locally** — the iPhone-side MSL compiler endpoint and smoke test are now in place. Still required: port Cuphead's Unity 2017.4 shader discovery/splitting logic and the Switch-NVN-to-SPIR-V/MSL translator so the app can generate the MSL input locally.
 5. **Prepare game assets locally** — organize RomFS, DLC, icon, metadata, and generated shader libraries in the app's prepared-game layout.
 6. **Package locally** — create the game-specific app payload from the prepared files and the installed NxNative runtime. The app must not need a cloud service to finish this step.
 7. **Validate and launch** — check required files, architecture, bundle layout, and compatibility profile before offering the finished app for installation/launch.
