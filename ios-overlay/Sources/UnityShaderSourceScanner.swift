@@ -133,7 +133,16 @@ enum UnityShaderSourceScanner {
                         let signature = try read(handle, offset: child.offset, count: 8)
                         if signature == Data("UnityFS\0".utf8) {
                             unityFSCount += 1
-                            report.append("unityfs_bundle|\(path)|bytes=\(child.length)")
+                            if unityFSHeaderReports < 100 {
+                                report.append("unityfs_bundle|\(path)|bytes=\(child.length)")
+                                let headerData = try read(handle, offset: child.offset, count: min(Int(child.length), 512))
+                                if let detail = inspectUnityFSHeader(headerData, fileLength: child.length) {
+                                    report.append("unityfs_header|\(path)|\(detail)")
+                                } else {
+                                    report.append("unityfs_header_error|\(path)|header_truncated_or_invalid")
+                                }
+                                unityFSHeaderReports += 1
+                            }
                         }
                     }
                 } else {
@@ -158,7 +167,7 @@ enum UnityShaderSourceScanner {
     /// Parses only the UnityFS container header. It deliberately does not decompress block info or payloads.
     private static func inspectUnityFSHeader(_ data: Data, fileLength: UInt64) -> String? {
         let bytes = [UInt8](data)
-        guard bytes.count >= 8, Array(bytes[0..<8]) == Array("UnityFS\\0".utf8) else { return nil }
+        guard bytes.count >= 8, Array(bytes[0..<8]) == Array("UnityFS\0".utf8) else { return nil }
         var cursor = 8
 
         func readBE32(_ p: Int) -> UInt32? {
@@ -203,7 +212,7 @@ enum UnityShaderSourceScanner {
         case 1: compressionName = "lzma"
         case 2: compressionName = "lz4"
         case 3: compressionName = "lz4hc"
-        default: compressionName = "unknown_\\(compression)"
+        default: compressionName = "unknown_\(compression)"
         }
         let headerSize = UInt64(cursor)
         guard totalSize > 0, totalSize <= fileLength,
@@ -216,10 +225,10 @@ enum UnityShaderSourceScanner {
 
         func safe(_ value: String) -> String {
             value.replacingOccurrences(of: "|", with: "_")
-                 .replacingOccurrences(of: "\\n", with: " ")
-                 .replacingOccurrences(of: "\\r", with: " ")
+                 .replacingOccurrences(of: "\n", with: " ")
+                 .replacingOccurrences(of: "\r", with: " ")
         }
-        return "format=\\(format)|player=\\(safe(playerVersion))|engine=\\(safe(engineVersion))|total=\\(totalSize)|header=\\(headerSize)|info_compressed=\\(compressedInfo)|info_uncompressed=\\(uncompressedInfo)|info_compression=\\(compressionName)|info_at_end=\\(infoAtEnd)|info_offset=\\(infoOffset)|data_offset=\\(dataOffset)|flags=0x\\(String(flags, radix: 16))"
+        return "format=\(format)|player=\(safe(playerVersion))|engine=\(safe(engineVersion))|total=\(totalSize)|header=\(headerSize)|info_compressed=\(compressedInfo)|info_uncompressed=\(uncompressedInfo)|info_compression=\(compressionName)|info_at_end=\(infoAtEnd)|info_offset=\(infoOffset)|data_offset=\(dataOffset)|flags=0x\(String(flags, radix: 16))"
     }
 
     private static func read(_ handle: FileHandle, offset: UInt64, count: Int) throws -> Data {
