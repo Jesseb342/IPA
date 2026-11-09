@@ -1001,6 +1001,8 @@ private struct ImportScreenView: View {
     @State private var rewriteLog = ""
     @State private var testingEncoder = false
     @State private var encoderTestLog = ""
+    @State private var testingMetalCompiler = false
+    @State private var metalCompilerLog = ""
     @State private var disassemblingModules = false
     @State private var disassemblyLog = ""
     @State private var functionOffset = "00000038"
@@ -1189,6 +1191,31 @@ private struct ImportScreenView: View {
                     }
                     if !rewriteLog.isEmpty {
                         Text(rewriteLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    if gameExtracted {
+                        Button {
+                            Task { await testOnDeviceMetalCompiler() }
+                        } label: {
+                            Label("Test on-device Metal compiler", systemImage: "cpu")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(testingMetalCompiler || testingEncoder || disassemblingModules || rewritingModules)
+                    }
+                    if testingMetalCompiler {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Compiling a test Metal compute shader on this iPhone…")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if !metalCompilerLog.isEmpty {
+                        Text(metalCompilerLog)
                             .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
@@ -1610,6 +1637,36 @@ private struct ImportScreenView: View {
             rewriteLog = report + "\nOutput: Documents/PreparedGame/RewrittenExeFS\nOriginal ExeFS was left unchanged. No game-specific patches were applied in this test."
         } catch {
             rewriteLog = "Rewrite failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func testOnDeviceMetalCompiler() async {
+        testingMetalCompiler = true
+        metalCompilerLog = ""
+        defer { testingMetalCompiler = false }
+
+        let source = """
+        #include <metal_stdlib>
+        using namespace metal;
+        kernel void nxn_on_device_smoke_test(
+            device uint *output [[buffer(0)]],
+            uint index [[thread_position_in_grid]]
+        ) {
+            output[index] = index + 1;
+        }
+        """
+
+        do {
+            let result = try await Task.detached(priority: .userInitiated) {
+                let pipeline = try OnDeviceMetalCompiler.compileComputeKernel(
+                    source: source,
+                    functionName: "nxn_on_device_smoke_test"
+                )
+                return "success|Metal compiled the test shader and created a compute pipeline.\nthread_execution_width|\\(pipeline.threadExecutionWidth)\nmax_total_threads_per_threadgroup|\\(pipeline.maxTotalThreadsPerThreadgroup)"
+            }.value
+            metalCompilerLog = result
+        } catch {
+            metalCompilerLog = "failed|On-device Metal compilation failed: \\(error.localizedDescription)"
         }
     }
 
