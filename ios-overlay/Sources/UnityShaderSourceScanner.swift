@@ -254,13 +254,14 @@ enum UnityShaderSourceScanner {
             }
             decoded = packed
         case 2, 3:
+            // UnityFS stores a bare LZ4 block; Apple's framed COMPRESSION_LZ4 is incompatible.
             var output = Data(count: Int(uncompressedInfo))
             let decodedCount = output.withUnsafeMutableBytes { destination in
                 packed.withUnsafeBytes { source in
                     guard let dst = destination.bindMemory(to: UInt8.self).baseAddress,
                           let src = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
                     return compression_decode_buffer(dst, Int(uncompressedInfo), src,
-                                                      Int(compressedInfo), nil, COMPRESSION_LZ4)
+                                                      Int(compressedInfo), nil, COMPRESSION_LZ4_RAW)
                 }
             }
             guard decodedCount == Int(uncompressedInfo) else {
