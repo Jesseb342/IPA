@@ -181,6 +181,57 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Set up .NET 10 for iOS shader translator probe
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Probe Ryujinx shader translator as an iOS NativeAOT library
+        id: shader_translator_probe
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -uo pipefail
+          PROBE_ROOT="$RUNNER_TEMP/nxn-shader-translator"
+          PUBLISH="$PROBE_ROOT/publish"
+          LOG="$PROBE_ROOT/publish.log"
+          mkdir -p "$PUBLISH"
+          echo "Installing the .NET 10 iOS workload..."
+          dotnet workload install ios --skip-manifest-update
+          echo "Publishing the Ryujinx translator for iPhone ARM64..."
+          dotnet publish ipa-overlay/translator-probe/NxNativeShaderTranslator.csproj \
+            --configuration Release \
+            --runtime ios-arm64 \
+            --output "$PUBLISH" \
+            -p:RyuSrc="$GITHUB_WORKSPACE/dm/third_party/ryujinx" \
+            > "$LOG" 2>&1
+          RESULT=$?
+          tail -100 "$LOG"
+          if [ "$RESULT" -ne 0 ]; then
+            echo "Ryujinx translator NativeAOT probe failed; inspect the uploaded log for the first incompatible dependency or API."
+            exit "$RESULT"
+          fi
+          DYLIB=$(find "$PUBLISH" -maxdepth 1 -name '*.dylib' -print -quit)
+          if [ -z "$DYLIB" ]; then
+            echo "Publish completed but no iOS dylib was produced."
+            exit 1
+          fi
+          nm -gU "$DYLIB" | grep -q '_nxn_translate_shader_jobs'
+          nm -gU "$DYLIB" | grep -q '_nxn_shader_translator_probe'
+          echo "Ryujinx translator linked into an iOS ARM64 NativeAOT library:"
+          ls -lh "$DYLIB"
+
+      - name: Upload shader translator NativeAOT probe diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxnative-shader-translator-ios-probe
+          path: |
+            ${{ runner.temp }}/nxn-shader-translator/publish.log
+            ${{ runner.temp }}/nxn-shader-translator/publish/*.dylib
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Apply IPA import-screen overlay
         shell: bash
         run: |
