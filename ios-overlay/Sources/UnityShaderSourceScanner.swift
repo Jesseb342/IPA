@@ -87,6 +87,7 @@ enum UnityShaderSourceScanner {
         var unityFSHeaderReports = 0
         let sampleCABURL = preparedDirectory.appendingPathComponent("unityfs-sample-CAB.bin")
         var report: [String] = [
+            "unityfs_scanner_revision|cab-diagnostic-v2",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
@@ -232,7 +233,7 @@ enum UnityShaderSourceScanner {
         default: compressionName = "unknown_\(compression)"
         }
         let headerSize = UInt64(cursor)
-        let headerLine = "unityfs_header|format=\(format)|player=\(safe(playerVersion))|engine=\(safe(engineVersion))|total=\(totalSize)|header=\(headerSize)|info_compressed=\(compressedInfo)|info_uncompressed=\(uncompressedInfo)|info_compression=\(compressionName)|info_at_end=\(infoAtEnd)|flags=0x\(String(flags, radix: 16))"
+        let headerLine = "unityfs_header|format=\(format)|player=\(safe(playerVersion))|engine=\(safe(engineVersion))|total=\(totalSize)|header=\(headerSize)|info_compressed=\(compressedInfo)|info_uncompressed=\(uncompressedInfo)|info_compression=\(compressionName)|info_at_end=\(infoAtEnd)|info_offset=\(infoAtEnd ? totalSize - UInt64(compressedInfo) : headerSize)|data_offset=\(infoAtEnd ? headerSize : headerSize + UInt64(compressedInfo))|flags=0x\(String(flags, radix: 16))"
         guard format == 6, totalSize > 0, totalSize <= fileLength,
               UInt64(compressedInfo) <= totalSize,
               uncompressedInfo >= 20, uncompressedInfo <= 16 * 1024 * 1024 else {
@@ -268,7 +269,8 @@ enum UnityShaderSourceScanner {
                 }
             }
             guard decodedCount == Int(uncompressedInfo) else {
-                return [headerLine, "unityfs_block_info_error|lz4_decode_failed_returned_\(decodedCount)_expected_\(uncompressedInfo)"]
+                let prefix = packed.prefix(24).map { String(format: "%02x", $0) }.joined()
+                return [headerLine, "unityfs_block_info_error|lz4_decode_failed_returned_\(decodedCount)_expected_\(uncompressedInfo)|packed_prefix=\(prefix)|packed_bytes=\(packed.count)"]
             }
             decoded = output
         default:
