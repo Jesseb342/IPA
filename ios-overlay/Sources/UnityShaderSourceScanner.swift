@@ -367,11 +367,49 @@ enum UnityShaderSourceScanner {
                 let signature = String(decoding: sample.prefix(8), as: UTF8.self)
                 let hex = sample.prefix(32).map { String(format: "%02x", $0) }.joined()
                 lines.append("unityfs_sample_cab|path=\(primaryNode.path)|bytes=\(sample.count)|signature=\(signature)|first32=\(hex)")
+                lines.append(contentsOf: inspectSerializedFileHeader(sample))
             } catch {
                 lines.append("unityfs_sample_cab_error|\(String(describing: error).replacingOccurrences(of: "|", with: "_"))")
             }
         }
         return lines
+    }
+
+    /// Validates the Unity SerializedFile header from the extracted CAB sample.
+    /// This deliberately stops before type-tree/object parsing until the exact 2017 layout is confirmed.
+    private static func inspectSerializedFileHeader(_ data: Data) -> [String] {
+        func be32(_ p: Int) -> UInt32? {
+            guard p >= 0, p + 4 <= data.count else { return nil }
+            return (UInt32(data[p]) << 24) | (UInt32(data[p + 1]) << 16) |
+                   (UInt32(data[p + 2]) << 8) | UInt32(data[p + 3])
+        }
+        guard data.count >= 24,
+              let metadataSize = be32(0),
+              let fileSize = be32(4),
+              let formatVersion = be32(8),
+              let dataOffset = be32(12) else {
+            return ["unity_serialized_header_error|header_too_short"]
+        }
+        let endian = data[16]
+        guard formatVersion >= 9, formatVersion <= 22,
+              fileSize == data.count,
+              metadataSize > 0, metadataSize <= fileSize,
+              dataOffset >= 20, dataOffset <= fileSize,
+              metadataSize <= dataOffset else {
+            return ["unity_serialized_header_error|bounds_or_version_invalid|metadata=\(metadataSize)|file=\(fileSize)|format=\(formatVersion)|data_offset=\(dataOffset)|actual=\(data.count)"]
+        }
+        let versionStart = 20
+        guard let terminator = data[versionStart...].firstIndex(of: 0), terminator > versionStart,
+              terminator - versionStart <= 64 else {
+            return ["unity_serialized_header_error|unity_version_string_missing"]
+        }
+        let unityVersion = String(decoding: data[versionStart..<terminator], as: UTF8.self)
+        let prefix = data.prefix(min(48, data.count)).map { String(format: "%02x", $0) }.joined()
+        let candidateMetadataStart = dataOffset - metadataSize
+        return [
+            "unity_serialized_header|format=\(formatVersion)|file_bytes=\(fileSize)|metadata_bytes=\(metadataSize)|data_offset=\(dataOffset)|endian=\(endian)|unity_version=\(unityVersion)|metadata_start_candidate=\(candidateMetadataStart)|header_prefix=\(prefix)",
+            "unity_serialized_header_check|file_size_matches=true|supported_format_range=true|unity_version_string=true"
+        ]
     }
 
     private static func extractUnityFSNode(_ nodeOffset: UInt64, size: UInt64,
