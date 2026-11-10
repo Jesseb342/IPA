@@ -368,6 +368,7 @@ enum UnityShaderSourceScanner {
                 let hex = sample.prefix(32).map { String(format: "%02x", $0) }.joined()
                 lines.append("unityfs_sample_cab|path=\(primaryNode.path)|bytes=\(sample.count)|signature=\(signature)|first32=\(hex)")
                 lines.append(contentsOf: inspectSerializedFileHeader(sample))
+                lines.append(contentsOf: inspectSerializedFileMetadata(sample))
             } catch {
                 lines.append("unityfs_sample_cab_error|\(String(describing: error).replacingOccurrences(of: "|", with: "_"))")
             }
@@ -410,6 +411,155 @@ enum UnityShaderSourceScanner {
             "unity_serialized_header|format=\(formatVersion)|file_bytes=\(fileSize)|metadata_bytes=\(metadataSize)|data_offset=\(dataOffset)|endian=\(endian)|unity_version=\(unityVersion)|metadata_start_candidate=\(candidateMetadataStart)|header_prefix=\(prefix)",
             "unity_serialized_header_check|file_size_matches=true|supported_format_range=true|unity_version_string=true"
         ]
+    }
+
+    /// Reads the version-17 metadata tables needed to locate Shader objects.
+    /// TypeTree blobs are skipped with strict bounds checks; object offsets are reported, not extracted yet.
+    private static func inspectSerializedFileMetadata(_ data: Data) -> [String] {
+        let bytes = [UInt8](data)
+        guard bytes.count >= 24,
+              readBE32(bytes, 8) == 17,
+              bytes[16] == 0 else {
+            return ["unity_serialized_metadata_error|requires_format_17_little_endian"]
+        }
+
+        var cursor = 20
+        func readLE32(_ position: Int) -> UInt32? {
+            guard position >= 0, position + 4 <= bytes.count else { return nil }
+            return UInt32(bytes[position]) | (UInt32(bytes[position + 1]) << 8) |
+                   (UInt32(bytes[position + 2]) << 16) | (UInt32(bytes[position + 3]) << 24)
+        }
+        func readLE16(_ position: Int) -> UInt16? {
+            guard position >= 0, position + 2 <= bytes.count else { return nil }
+            return UInt16(bytes[position]) | (UInt16(bytes[position + 1]) << 8)
+        }
+        func readCString() -> String? {
+            guard cursor < bytes.count else { return nil }
+            let start = cursor
+            while cursor < bytes.count && bytes[cursor] != 0 { cursor += 1 }
+            guard cursor < bytes.count else { return nil }
+            let value = String(decoding: bytes[start..<cursor], as: UTF8.self)
+            cursor += 1
+            return value
+        }
+        guard let unityVersion = readCString(),
+              let targetRaw = readLE32(cursor) else {
+            return ["unity_serialized_metadata_error|truncated_version_or_platform"]
+        }
+        cursor += 4
+        guard cursor < bytes.count else {
+            return ["unity_serialized_metadata_error|missing_type_tree_flag"]
+        }
+        let hasTypeTree = bytes[cursor] != 0
+        cursor += 1
+        guard let typeCountRaw = readLE32(cursor) else {
+            return ["unity_serialized_metadata_error|missing_type_count"]
+        }
+        cursor += 4
+        let typeCount = Int(Int32(bitPattern: typeCountRaw))
+        guard typeCount >= 0, typeCount <= 100_000 else {
+            return ["unity_serialized_metadata_error|invalid_type_count_\(typeCount)"]
+        }
+
+        var classIDs: [Int32] = []
+        classIDs.reserveCapacity(typeCount)
+        var shaderTypes = 0
+        for _ in 0..<typeCount {
+            guard let classRaw = readLE32(cursor), cursor + 7 <= bytes.count else {
+                return ["unity_serialized_metadata_error|truncated_type_entry"]
+            }
+            let classID = Int32(bitPattern: classRaw)
+            classIDs.append(classID)
+            if classID == 48 { shaderTypes += 1 }
+            cursor += 4
+            cursor += 1 // stripped flag
+            guard readLE16(cursor) != nil else {
+                return ["unity_serialized_metadata_error|truncated_script_type_index"]
+            }
+            cursor += 2
+            if classID == 114 {
+                guard cursor + 16 <= bytes.count else {
+                    return ["unity_serialized_metadata_error|truncated_mono_script_hash"]
+                }
+                cursor += 16
+            }
+            guard cursor + 16 <= bytes.count else {
+                return ["unity_serialized_metadata_error|truncated_type_hash"]
+            }
+            cursor += 16
+
+            if hasTypeTree {
+                guard let nodeCountRaw = readLE32(cursor),
+                      let stringSizeRaw = readLE32(cursor + 4) else {
+                    return ["unity_serialized_metadata_error|truncated_type_tree_header"]
+                }
+                cursor += 8
+                let nodeCount = Int(Int32(bitPattern: nodeCountRaw))
+                let stringSize = Int(Int32(bitPattern: stringSizeRaw))
+                guard nodeCount >= 0, nodeCount <= 500_000,
+                      stringSize >= 0, stringSize <= 16 * 1024 * 1024 else {
+                    return ["unity_serialized_metadata_error|unsafe_type_tree_size"]
+                }
+                let nodeBytes = nodeCount.multipliedReportingOverflow(by: 24)
+                guard !nodeBytes.overflow,
+                      cursor <= bytes.count,
+                      nodeBytes.partialValue <= bytes.count - cursor,
+                      stringSize <= bytes.count - cursor - nodeBytes.partialValue else {
+                    return ["unity_serialized_metadata_error|type_tree_exceeds_file_bounds"]
+                }
+                cursor += nodeBytes.partialValue + stringSize
+            }
+        }
+
+        cursor = (cursor + 3) & ~3
+        guard let objectCountRaw = readLE32(cursor) else {
+            return ["unity_serialized_metadata_error|missing_object_count"]
+        }
+        cursor += 4
+        let objectCount = Int(Int32(bitPattern: objectCountRaw))
+        guard objectCount >= 0, objectCount <= 2_000_000 else {
+            return ["unity_serialized_metadata_error|invalid_object_count_\(objectCount)"]
+        }
+
+        var shaderObjects = 0
+        var shaderSamples: [String] = []
+        for _ in 0..<objectCount {
+            cursor = (cursor + 3) & ~3
+            guard cursor <= bytes.count, 20 <= bytes.count - cursor,
+                  let startRaw = readLE32(cursor + 8),
+                  let sizeRaw = readLE32(cursor + 12),
+                  let typeRaw = readLE32(cursor + 16) else {
+                return ["unity_serialized_metadata_error|truncated_object_table"]
+            }
+            let typeIndex = Int(Int32(bitPattern: typeRaw))
+            guard typeIndex >= 0, typeIndex < classIDs.count else {
+                return ["unity_serialized_metadata_error|object_type_index_out_of_range"]
+            }
+            let classID = classIDs[typeIndex]
+            if classID == 48 {
+                shaderObjects += 1
+                if shaderSamples.count < 8 {
+                    shaderSamples.append("shader_object_candidate|data_offset=\(startRaw)|bytes=\(sizeRaw)|type_index=\(typeIndex)")
+                }
+            }
+            cursor += 20
+        }
+
+        var result = [
+            "unity_serialized_metadata|unity_version=\(unityVersion)|target_platform=\(Int32(bitPattern: targetRaw))|type_tree=\(hasTypeTree)|types=\(typeCount)|objects=\(objectCount)|shader_types=\(shaderTypes)|shader_objects=\(shaderObjects)",
+            "unity_serialized_metadata_check|type_table_bounds=true|object_table_bounds=true|format=17"
+        ]
+        result.append(contentsOf: shaderSamples)
+        if shaderObjects == 0 {
+            result.append("unity_shader_note|No Shader class objects were present in this small CAB sample.")
+        }
+        return result
+    }
+
+    private static func readBE32(_ bytes: [UInt8], _ position: Int) -> UInt32? {
+        guard position >= 0, position + 4 <= bytes.count else { return nil }
+        return (UInt32(bytes[position]) << 24) | (UInt32(bytes[position + 1]) << 16) |
+               (UInt32(bytes[position + 2]) << 8) | UInt32(bytes[position + 3])
     }
 
     private static func extractUnityFSNode(_ nodeOffset: UInt64, size: UInt64,
