@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-10T07:27:48Z",
+  "generatedAt": "2026-11-10T19:50:23Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "790eb480828d3404638ee9c7ade05001fe11e7dc",
+    "commit": "79161a286c6f164fd0c74e796f2fd62f654beb98",
     "profilesPath": "dm/games"
   },
-  "count": 154,
+  "count": 157,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -967,6 +967,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100606026F12000/README.md"
     },
     {
+      "titleId": "010061D00DB74000",
+      "name": "Ori and the Blind Forest: Definitive Edition",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010061D00DB74000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010061D00DB74000/README.md"
+    },
+    {
       "titleId": "0100620012D6E000",
       "name": "Big Brain Academy: Brain vs. Brain",
       "profileStatus": "profile_available",
@@ -1288,6 +1305,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010076F0049A2000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010076F0049A2000/README.md"
+    },
+    {
+      "titleId": "01007820196A6000",
+      "name": "Red Dead Redemption",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007820196A6000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007820196A6000/README.md"
     },
     {
       "titleId": "01007960049A0000",
@@ -2240,6 +2274,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D9F01D474000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D9F01D474000/README.md"
+    },
+    {
+      "titleId": "0100DA801624E000",
+      "name": "TUNIC",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100DA801624E000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100DA801624E000/README.md"
     },
     {
       "titleId": "0100DCA0064A6000",
