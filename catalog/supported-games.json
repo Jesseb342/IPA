@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-11T06:39:37Z",
+  "generatedAt": "2026-11-11T19:41:47Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "79161a286c6f164fd0c74e796f2fd62f654beb98",
+    "commit": "d58c7b2297b87c45cf5223a7ef94422c14969449",
     "profilesPath": "dm/games"
   },
-  "count": 157,
+  "count": 160,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -217,6 +217,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100199023B2E000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100199023B2E000/README.md"
+    },
+    {
+      "titleId": "010019A01E2F2000",
+      "name": "Metroid Prime 4: Beyond",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010019A01E2F2000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010019A01E2F2000/README.md"
     },
     {
       "titleId": "01001F5010DFA000",
@@ -1562,6 +1579,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008DB008C2C000/README.md"
     },
     {
+      "titleId": "01008DD013200000",
+      "name": "Ori and the Will of the Wisps",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008DD013200000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008DD013200000/README.md"
+    },
+    {
       "titleId": "01008F6008C5E000",
       "name": "Pokémon Violet",
       "profileStatus": "profile_available",
@@ -1696,6 +1730,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010099C022B96000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010099C022B96000/README.md"
+    },
+    {
+      "titleId": "01009BC00C38A000",
+      "name": "The Binding of Isaac: Rebirth",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": true
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01009BC00C38A000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01009BC00C38A000/README.md"
     },
     {
       "titleId": "01009BF0072D4000",
