@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-12T07:22:31Z",
+  "generatedAt": "2026-11-12T20:04:10Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "d58c7b2297b87c45cf5223a7ef94422c14969449",
+    "commit": "8a5c466cc7c331d901e45cdef237b689f37cfb00",
     "profilesPath": "dm/games"
   },
-  "count": 160,
+  "count": 164,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -234,6 +234,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010019A01E2F2000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010019A01E2F2000/README.md"
+    },
+    {
+      "titleId": "01001B300B9BE000",
+      "name": "Diablo III: Eternal Collection",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": true
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01001B300B9BE000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01001B300B9BE000/README.md"
     },
     {
       "titleId": "01001F5010DFA000",
@@ -1271,6 +1288,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100713016CCC000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100713016CCC000/README.md"
+    },
+    {
+      "titleId": "0100726014352000",
+      "name": "Diablo II: Resurrected",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": true
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100726014352000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100726014352000/README.md"
     },
     {
       "titleId": "01007300020FA000",
@@ -2667,6 +2701,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/04007EF01F8AE000/README.md"
     },
     {
+      "titleId": "04008E001F098000",
+      "name": "Nintendo Switch Sports Resort",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/04008E001F098000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/04008E001F098000/README.md"
+    },
+    {
       "titleId": "0400A3A01EE4C000",
       "name": "Pokemon Pokopia",
       "profileStatus": "profile_available",
@@ -2699,6 +2750,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0400C3F00006E000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0400C3F00006E000/README.md"
+    },
+    {
+      "titleId": "0400C76024710000",
+      "name": "PRAGMATA",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0400C76024710000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0400C76024710000/README.md"
     },
     {
       "titleId": "0400D4201C6EA000",
