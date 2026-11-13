@@ -293,6 +293,25 @@ jobs:
           grep -q 'makeLibrary(source: source, options: options)' dm/ios/Sources/OnDeviceMetalCompiler.swift
           echo "IPA import UI overlay applied."
 
+      - name: Keep compiled shell executable out of resource-size false positive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - dm/ios/tools/shell_build.sh <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          source = path.read_text()
+          old = '''big=$(find "$A" -type f -size +8M -not -path '*/dm/font/*' | head -5)'''
+          new = '''big=$(find "$A" -type f -size +8M -not -path '*/dm/font/*' -not -path "$A/DmIOS" | head -5)'''
+          if source.count(old) != 1:
+              raise SystemExit("Expected exactly one upstream shell size guard; refusing an unsafe patch.")
+          path.write_text(source.replace(old, new))
+          print("Size guard now checks oversized app resources while allowing the compiled DmIOS executable.")
+          PY
+          grep -Fq ' -not -path "$A/DmIOS"' dm/ios/tools/shell_build.sh
+
       - name: Build game-free shell
         shell: bash
         env:
