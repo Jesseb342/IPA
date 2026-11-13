@@ -98,7 +98,7 @@ enum UnityShaderSourceScanner {
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
             "index_entries|\(count)",
-            "note|Metadata-only scan. Game files remain in Documents/PreparedGame."
+            "note|Bounded local shader-object inspection. No game files or keys leave Documents/PreparedGame."
         ]
         var visited = Set<Int>()
 
@@ -680,7 +680,7 @@ enum UnityShaderSourceScanner {
         return [
             "shader_object_forensic|object_index=\(objectIndex)|bytes=\(bytes.count)|raw_file=\(outputURL.lastPathComponent)",
             "shader_object_prefix_hex|\(preview)",
-            "shader_object_ascii_summary|strings_found_at_least_4_bytes=\(strings.count)|reported=\(min(strings.count, 80))"
+            "shader_object_ascii_summary|strings_sampled_up_to_160=\(strings.count)|reported=\(min(strings.count, 80))"
         ] + markerLines + stringLines
     }
 
