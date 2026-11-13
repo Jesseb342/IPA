@@ -83,6 +83,7 @@ enum UnityShaderSourceScanner {
         var fileCount = 0
         var unityFSCount = 0
         var serializedCandidates = 0
+        var directSerializedScans = 0
         var bundleCandidates = 0
         var unityFSHeaderReports = 0
         let sampleCABURLs = [
