@@ -1136,6 +1136,18 @@ private struct ImportScreenView: View {
                             }
                         }
                         if !shaderSourceScanLog.isEmpty {
+                            HStack {
+                                Text("Shader scan report")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button {
+                                    UIPasteboard.general.string = shaderSourceScanLog
+                                } label: {
+                                    Label("Copy all", systemImage: "doc.on.doc")
+                                }
+                                .buttonStyle(.bordered)
+                            }
                             Text(shaderSourceScanLog)
                                 .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(.secondary)
