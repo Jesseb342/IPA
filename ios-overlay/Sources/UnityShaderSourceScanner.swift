@@ -91,7 +91,7 @@ enum UnityShaderSourceScanner {
             "atlas_beelevel": preparedDirectory.appendingPathComponent("unityfs-sample-atlas-beelevel-CAB.bin")
         ]
         var report: [String] = [
-            "unityfs_scanner_revision|cab-multisample-v1",
+            "unityfs_scanner_revision|cab-and-main-assets-v1",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
@@ -126,6 +126,29 @@ enum UnityShaderSourceScanner {
                         serializedCandidates += 1
                         if serializedCandidates <= 120 {
                             report.append("serialized_candidate|\(path)|bytes=\(child.length)")
+                        }
+
+                        // Inspect main Unity SerializedFiles in addition to AssetBundle CABs.
+                        // Only read bounded files after confirming the format-17 header.
+                        let highValue = lower == "data/resources.assets" ||
+                            lower == "data/globalgamemanagers.assets" ||
+                            lower == "data/globalgamemanagers" ||
+                            lower.range(of: #"data/sharedassets[0-9]+\.assets$"#, options: .regularExpression) != nil ||
+                            lower.range(of: #"data/level[0-9]+$"#, options: .regularExpression) != nil
+                        if highValue && directSerializedScans < 64 &&
+                            child.length >= 24 && child.length <= 32 * 1024 * 1024 {
+                            let prefix = try read(handle, offset: child.offset, count: 16)
+                            if prefix.count == 16 && readBE32(Array(prefix), 8) == 17 {
+                                let serializedData = try read(handle, offset: child.offset, count: Int(child.length))
+                                if UInt64(serializedData.count) == child.length {
+                                    directSerializedScans += 1
+                                    report.append("unity_serialized_direct|\(path)|bytes=\(child.length)")
+                                    report.append(contentsOf: inspectSerializedFileHeader(serializedData))
+                                    report.append(contentsOf: inspectSerializedFileMetadata(serializedData))
+                                } else {
+                                    report.append("unity_serialized_direct_error|\(path)|read_incomplete")
+                                }
+                            }
                         }
                     }
                     if likelyBundle {
