@@ -293,6 +293,52 @@ jobs:
           grep -q 'makeLibrary(source: source, options: options)' dm/ios/Sources/OnDeviceMetalCompiler.swift
           echo "IPA import UI overlay applied."
 
+      # Shader milestone: move from reporting candidate offsets to extracting
+      # verified Unity Shader object bytes locally on the iPhone. This gate
+      # checks the current scanner contract; it does not process game payloads.
+      - name: Validate next shader extraction milestone
+        shell: bash
+        run: |
+          set -euo pipefail
+          SCANNER="ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift"
+          REPORT="$RUNNER_TEMP/shader-extraction-next-steps.txt"
+          test -s "$SCANNER"
+          python3 - "$SCANNER" "$REPORT" <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path(sys.argv[1]).read_text()
+          required = {
+              "format-17 little-endian guard": "requires_format_17_little_endian",
+              "serialized data offset": "serializedDataOffset",
+              "Shader class identification": "classID == 48",
+              "object-relative byte start": "object_byte_start=",
+              "absolute file offset": "file_offset=",
+              "object byte size": "bytes=\\(sizeRaw)",
+              "overflow-safe object end": "absoluteEnd >= absoluteStart",
+              "file-bound validation": "absoluteEnd <= UInt64(bytes.count)",
+              "candidate record": "shader_object_candidate|",
+          }
+          missing = [label for label, token in required.items() if token not in source]
+          if missing:
+              raise SystemExit("Shader scanner contract missing: " + ", ".join(missing))
+
+          plan = """Cuphead shader extraction — next development steps
+          1. Confirm Unity format-17 object layout, including bigIDEnabled and pathID width, against the real Cuphead SerializedFiles.
+          2. Validate candidate object ranges and class/type mapping; investigate unusually large candidates before extraction.
+          3. Add bounded local extraction of verified Shader object bytes into Documents/PreparedGame/ShaderSources.
+          4. Parse Unity Shader serialized metadata and identify each program's stage and required resources.
+          5. Locate/extract the corresponding Nintendo Switch Maxwell shader code and build translator job JSON.
+          6. Run the embedded Ryujinx translator on-device, then compile generated Metal source with Apple's Metal compiler.
+          7. Verify the first real Cuphead shader output and preserve a copyable diagnostic report.
+          
+          Current boundary: this workflow only validates source-code prerequisites. It does not access, upload, or convert any user game files or keys. Actual extraction and translation must execute inside the iOS app sandbox.
+          """
+          Path(sys.argv[2]).write_text(plan)
+          print("Verified all current Unity shader candidate-offset safeguards.")
+          print(plan)
+          PY
+
       - name: Keep compiled shell executable out of resource-size false positive
         shell: bash
         run: |
@@ -471,6 +517,15 @@ jobs:
           file "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator"
           echo "Shell file count: $(find "$APP" -type f | wc -l | tr -d ' ')"
 
+
+      - name: Upload shader extraction roadmap
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cuphead-shader-extraction-next-steps
+          path: ${{ runner.temp }}/shader-extraction-next-steps.txt
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Upload universal shell build input
         uses: actions/upload-artifact@v4
