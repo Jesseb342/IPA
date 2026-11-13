@@ -84,6 +84,7 @@ enum UnityShaderSourceScanner {
         var unityFSCount = 0
         var serializedCandidates = 0
         var directSerializedScans = 0
+        var directSerializedBytes: UInt64 = 0
         var bundleCandidates = 0
         var unityFSHeaderReports = 0
         let sampleCABURLs = [
@@ -92,7 +93,7 @@ enum UnityShaderSourceScanner {
             "atlas_beelevel": preparedDirectory.appendingPathComponent("unityfs-sample-atlas-beelevel-CAB.bin")
         ]
         var report: [String] = [
-            "unityfs_scanner_revision|prioritize-main-assets-v2",
+            "unityfs_scanner_revision|prioritize-main-assets-v3",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
@@ -138,13 +139,15 @@ enum UnityShaderSourceScanner {
                             lower == "data/globalgamemanagers.assets" ||
                             lower == "data/globalgamemanagers" ||
                             lower.range(of: #"data/sharedassets[0-9]+\.assets$"#, options: .regularExpression) != nil
-                        if highValue && directSerializedScans < 64 &&
-                            child.length >= 24 && child.length <= 32 * 1024 * 1024 {
+                        if highValue && directSerializedScans < 160 &&
+                            child.length >= 24 && child.length <= 32 * 1024 * 1024 &&
+                            directSerializedBytes <= 512 * 1024 * 1024 - child.length {
                             let prefix = try read(handle, offset: child.offset, count: 16)
                             if prefix.count == 16 && readBE32(Array(prefix), 8) == 17 {
                                 let serializedData = try read(handle, offset: child.offset, count: Int(child.length))
                                 if UInt64(serializedData.count) == child.length {
                                     directSerializedScans += 1
+                                    directSerializedBytes += child.length
                                     report.append("unity_serialized_direct|\(path)|bytes=\(child.length)")
                                     report.append(contentsOf: inspectSerializedFileHeader(serializedData).map { "unity_serialized_source|\(path)|\($0)" })
                                     report.append(contentsOf: inspectSerializedFileMetadata(serializedData).map { "unity_serialized_source|\(path)|\($0)" })
@@ -193,7 +196,7 @@ enum UnityShaderSourceScanner {
         }
 
         try walk(0, "", 0)
-        report.insert("summary|files=\(fileCount)|serialized_candidates=\(serializedCandidates)|bundle_candidates=\(bundleCandidates)|unityfs_bundles=\(unityFSCount)", at: 3)
+        report.insert("summary|files=\(fileCount)|serialized_candidates=\(serializedCandidates)|bundle_candidates=\(bundleCandidates)|unityfs_bundles=\(unityFSCount)|direct_serialized_scans=\(directSerializedScans)|direct_serialized_bytes=\(directSerializedBytes)", at: 3)
         if serializedCandidates > 120 { report.append("serialized_candidates_omitted|\(serializedCandidates - 120)") }
         if bundleCandidates > 120 { report.append("bundle_candidates_omitted|\(bundleCandidates - 120)") }
         if unityFSCount == 0 {
