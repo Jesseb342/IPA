@@ -1116,7 +1116,7 @@ private struct ImportScreenView: View {
                         Button {
                             Task { await scanUnityShaderSources() }
                         } label: {
-                            Label("Scan Unity Shader Sources", systemImage: "doc.text.magnifyingglass")
+                            Label("Inspect Unity Shader Objects", systemImage: "doc.text.magnifyingglass")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
@@ -1125,14 +1125,14 @@ private struct ImportScreenView: View {
                         .disabled(!gameExtracted || scanningShaderSources || extracting)
 
                         if !gameExtracted {
-                            Text("Extract the game below first. This scan button stays here so it is easy to find.")
+                            Text("After extraction, this inspects Unity shader candidates and saves a raw copy of resources.assets object 142 for local analysis.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                         if scanningShaderSources {
                             HStack(spacing: 10) {
                                 ProgressView()
-                                Text("Scanning the extracted game index…").foregroundStyle(.secondary)
+                                Text("Inspecting Unity shader objects and object 142…").foregroundStyle(.secondary)
                             }
                         }
                         if !shaderSourceScanLog.isEmpty {
