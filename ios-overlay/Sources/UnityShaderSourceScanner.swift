@@ -145,7 +145,7 @@ enum UnityShaderSourceScanner {
                                 let headerData = try read(handle, offset: child.offset, count: min(Int(child.length), 512))
                                 if let details = inspectUnityFSHeader(headerData, fileLength: child.length,
                                                                             imageHandle: handle, imageOffset: child.offset,
-                                                                            sampleCABURL: sampleCABURLs.first(where: { lower.contains("/\\($0.key)/") || lower.hasSuffix("/\\($0.key)") })?.value) {
+                                                                            sampleCABURL: sampleCABURLs.first(where: { lower.contains("/\($0.key)/") || lower.hasSuffix("/\($0.key)") })?.value) {
                                     for detail in details {
                                         if let separator = detail.firstIndex(of: "|") {
                                             let kind = detail[..<separator]
