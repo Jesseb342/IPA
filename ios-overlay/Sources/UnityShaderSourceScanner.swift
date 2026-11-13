@@ -85,9 +85,13 @@ enum UnityShaderSourceScanner {
         var serializedCandidates = 0
         var bundleCandidates = 0
         var unityFSHeaderReports = 0
-        let sampleCABURL = preparedDirectory.appendingPathComponent("unityfs-sample-CAB.bin")
+        let sampleCABURLs = [
+            "atlas_player": preparedDirectory.appendingPathComponent("unityfs-sample-atlas-player-CAB.bin"),
+            "atlas_baronesslevel": preparedDirectory.appendingPathComponent("unityfs-sample-atlas-baronesslevel-CAB.bin"),
+            "atlas_beelevel": preparedDirectory.appendingPathComponent("unityfs-sample-atlas-beelevel-CAB.bin")
+        ]
         var report: [String] = [
-            "unityfs_scanner_revision|cab-diagnostic-v2",
+            "unityfs_scanner_revision|cab-multisample-v1",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
@@ -136,12 +140,12 @@ enum UnityShaderSourceScanner {
                         let signature = try read(handle, offset: child.offset, count: 8)
                         if signature == Data("UnityFS\0".utf8) {
                             unityFSCount += 1
-                            if unityFSHeaderReports < 100 {
+                            if unityFSHeaderReports < 400 {
                                 report.append("unityfs_bundle|\(path)|bytes=\(child.length)")
                                 let headerData = try read(handle, offset: child.offset, count: min(Int(child.length), 512))
                                 if let details = inspectUnityFSHeader(headerData, fileLength: child.length,
                                                                             imageHandle: handle, imageOffset: child.offset,
-                                                                            sampleCABURL: unityFSHeaderReports == 0 ? sampleCABURL : nil) {
+                                                                            sampleCABURL: sampleCABURLs.first(where: { lower.contains("/\\($0.key)/") || lower.hasSuffix("/\\($0.key)") })?.value) {
                                     for detail in details {
                                         if let separator = detail.firstIndex(of: "|") {
                                             let kind = detail[..<separator]
