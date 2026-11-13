@@ -93,7 +93,7 @@ enum UnityShaderSourceScanner {
             "atlas_beelevel": preparedDirectory.appendingPathComponent("unityfs-sample-atlas-beelevel-CAB.bin")
         ]
         var report: [String] = [
-            "unityfs_scanner_revision|prioritize-main-assets-v3",
+            "unityfs_scanner_revision|prioritize-main-assets-v4-object142-forensics",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
