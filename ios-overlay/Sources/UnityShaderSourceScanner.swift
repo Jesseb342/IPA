@@ -409,7 +409,7 @@ enum UnityShaderSourceScanner {
                 let hex = sample.prefix(32).map { String(format: "%02x", $0) }.joined()
                 lines.append("unityfs_sample_cab|path=\(primaryNode.path)|bytes=\(sample.count)|signature=\(signature)|first32=\(hex)")
                 lines.append(contentsOf: inspectSerializedFileHeader(sample))
-                lines.append(contentsOf: inspectSerializedFileMetadata(sample))
+                lines.append(contentsOf: try inspectSerializedFileMetadata(sample))
             } catch {
                 lines.append("unityfs_sample_cab_error|\(String(describing: error).replacingOccurrences(of: "|", with: "_"))")
             }
