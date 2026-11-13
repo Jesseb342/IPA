@@ -471,7 +471,7 @@ jobs:
 
           binary = pathlib.Path(sys.argv[1])
           data = binary.read_bytes()
-          required = (b"ImportScreenView", b"_dm_show_import_screen", b"Scan Unity Shader Sources", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso", b"nxn_arm64_inspect_function", b"nxn_arm64_discover_linker_stubs")
+          required = (b"ImportScreenView", b"_dm_show_import_screen", b"Inspect Unity Shader Objects", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso", b"nxn_arm64_inspect_function", b"nxn_arm64_discover_linker_stubs")
           missing = [item.decode() for item in required if item not in data]
           if missing:
               print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
