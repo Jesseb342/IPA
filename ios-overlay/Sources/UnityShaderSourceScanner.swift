@@ -456,6 +456,9 @@ enum UnityShaderSourceScanner {
             return ["unity_serialized_metadata_error|requires_format_17_little_endian"]
         }
 
+        guard let serializedDataOffset = readBE32(bytes, 12), Int(serializedDataOffset) <= bytes.count else {
+            return ["unity_serialized_metadata_error|invalid_serialized_data_offset"]
+        }
         var cursor = 20
         func readLE32(_ position: Int) -> UInt32? {
             guard position >= 0, position + 4 <= bytes.count else { return nil }
@@ -575,7 +578,12 @@ enum UnityShaderSourceScanner {
             let classID = classIDs[typeIndex]
             if classID == 48 {
                 shaderObjects += 1
-                shaderSamples.append("shader_object_candidate|object_index=\(objectIndex)|data_offset=\(startRaw)|bytes=\(sizeRaw)|type_index=\(typeIndex)")
+                let absoluteStart = UInt64(serializedDataOffset) + UInt64(startRaw)
+                let absoluteEnd = absoluteStart + UInt64(sizeRaw)
+                guard absoluteEnd >= absoluteStart, absoluteEnd <= UInt64(bytes.count) else {
+                    return ["unity_serialized_metadata_error|shader_object_range_out_of_bounds|object_index=\(objectIndex)"]
+                }
+                shaderSamples.append("shader_object_candidate|object_index=\(objectIndex)|object_byte_start=\(startRaw)|file_offset=\(absoluteStart)|bytes=\(sizeRaw)|type_index=\(typeIndex)")
             }
             cursor += 20
         }
