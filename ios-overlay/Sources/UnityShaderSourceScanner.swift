@@ -150,7 +150,15 @@ enum UnityShaderSourceScanner {
                                     directSerializedBytes += child.length
                                     report.append("unity_serialized_direct|\(path)|bytes=\(child.length)")
                                     report.append(contentsOf: inspectSerializedFileHeader(serializedData).map { "unity_serialized_source|\(path)|\($0)" })
-                                    report.append(contentsOf: inspectSerializedFileMetadata(serializedData).map { "unity_serialized_source|\(path)|\($0)" })
+                                    let inspectIndex = lower == "data/resources.assets" ? 142 : nil
+                                    let objectURL = preparedDirectory
+                                        .appendingPathComponent("ShaderSources", isDirectory: true)
+                                        .appendingPathComponent("resources-assets-shader-object-142.bin")
+                                    report.append(contentsOf: try inspectSerializedFileMetadata(
+                                        serializedData,
+                                        inspectObjectIndex: inspectIndex,
+                                        outputURL: inspectIndex == nil ? nil : objectURL
+                                    ).map { "unity_serialized_source|\(path)|\($0)" })
                                 } else {
                                     report.append("unity_serialized_direct_error|\(path)|read_incomplete")
                                 }
@@ -446,9 +454,12 @@ enum UnityShaderSourceScanner {
         ]
     }
 
-    /// Reads the version-17 metadata tables needed to locate Shader objects.
-    /// TypeTree blobs are skipped with strict bounds checks; object offsets are reported, not extracted yet.
-    private static func inspectSerializedFileMetadata(_ data: Data) -> [String] {
+    /// Reads version-17 metadata and can extract one selected Shader object for local forensic inspection.
+    private static func inspectSerializedFileMetadata(
+        _ data: Data,
+        inspectObjectIndex: Int? = nil,
+        outputURL: URL? = nil
+    ) throws -> [String] {
         let bytes = [UInt8](data)
         guard bytes.count >= 24,
               readBE32(bytes, 8) == 17,
@@ -547,10 +558,17 @@ enum UnityShaderSourceScanner {
             }
         }
 
-        // Unity 5.5–2018.4 (format 17) places m_ObjectCount immediately
-        // after the type array. Do NOT align here: AssetStudio's format-17
-        // reader consumes this Int32 at the current cursor. Object records
-        // themselves are aligned individually below (path IDs are 64-bit).
+        // In format 17, bigIDEnabled follows the type array and controls
+        // both pathID width and the 4-byte alignment before 64-bit pathIDs.
+        // m_ObjectCount immediately follows this flag; do not align here.
+        guard let bigIDRaw = readLE32(cursor) else {
+            return ["unity_serialized_metadata_error|missing_big_id_enabled"]
+        }
+        cursor += 4
+        let bigIDEnabled = bigIDRaw != 0
+        guard bigIDRaw <= 1 else {
+            return ["unity_serialized_metadata_error|invalid_big_id_enabled_\(bigIDRaw)"]
+        }
         let objectCountOffset = cursor
         guard let objectCountRaw = readLE32(objectCountOffset) else {
             return ["unity_serialized_metadata_error|missing_object_count|offset=\(objectCountOffset)"]
@@ -563,12 +581,16 @@ enum UnityShaderSourceScanner {
 
         var shaderObjects = 0
         var shaderSamples: [String] = []
+        var forensicReport: [String] = []
+        var selectedObjectExtracted = false
         for objectIndex in 0..<objectCount {
-            cursor = (cursor + 3) & ~3
-            guard cursor <= bytes.count, 20 <= bytes.count - cursor,
-                  let startRaw = readLE32(cursor + 8),
-                  let sizeRaw = readLE32(cursor + 12),
-                  let typeRaw = readLE32(cursor + 16) else {
+            if bigIDEnabled { cursor = (cursor + 3) & ~3 }
+            let pathIDWidth = bigIDEnabled ? 8 : 4
+            let recordBytes = pathIDWidth + 12
+            guard cursor >= 0, cursor <= bytes.count, recordBytes <= bytes.count - cursor,
+                  let startRaw = readLE32(cursor + pathIDWidth),
+                  let sizeRaw = readLE32(cursor + pathIDWidth + 4),
+                  let typeRaw = readLE32(cursor + pathIDWidth + 8) else {
                 return ["unity_serialized_metadata_error|truncated_object_table"]
             }
             let typeIndex = Int(Int32(bitPattern: typeRaw))
@@ -584,19 +606,82 @@ enum UnityShaderSourceScanner {
                     return ["unity_serialized_metadata_error|shader_object_range_out_of_bounds|object_index=\(objectIndex)"]
                 }
                 shaderSamples.append("shader_object_candidate|object_index=\(objectIndex)|object_byte_start=\(startRaw)|file_offset=\(absoluteStart)|bytes=\(sizeRaw)|type_index=\(typeIndex)")
+                if inspectObjectIndex == objectIndex {
+                    guard let outputURL, sizeRaw > 0, sizeRaw <= 16 * 1024 * 1024 else {
+                        return ["shader_object_forensic_error|selected_object_missing_output_or_unsafe_size"]
+                    }
+                    let objectData = data.subdata(in: Int(absoluteStart)..<Int(absoluteEnd))
+                    try FileManager.default.createDirectory(
+                        at: outputURL.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    try objectData.write(to: outputURL, options: .atomic)
+                    forensicReport = inspectShaderObjectBytes(objectData, objectIndex: objectIndex, outputURL: outputURL)
+                    selectedObjectExtracted = true
+                }
             }
-            cursor += 20
+            cursor += recordBytes
         }
 
         var result = [
-            "unity_serialized_metadata|unity_version=\(unityVersion)|target_platform=\(Int32(bitPattern: targetRaw))|type_tree=\(hasTypeTree)|types=\(typeCount)|objects=\(objectCount)|object_count_offset=\(objectCountOffset)|shader_types=\(shaderTypes)|shader_objects=\(shaderObjects)",
-            "unity_serialized_metadata_check|type_table_bounds=true|object_table_bounds=true|object_count_unaligned=true|format=17"
+            "unity_serialized_metadata|unity_version=\(unityVersion)|target_platform=\(Int32(bitPattern: targetRaw))|type_tree=\(hasTypeTree)|types=\(typeCount)|objects=\(objectCount)|object_count_offset=\(objectCountOffset)|big_id_enabled=\(bigIDEnabled)|path_id_bytes=\(bigIDEnabled ? 8 : 4)|shader_types=\(shaderTypes)|shader_objects=\(shaderObjects)",
+            "unity_serialized_metadata_check|type_table_bounds=true|object_table_bounds=true|object_count_unaligned=true|format=17|path_id_layout_checked=true"
         ]
         result.append(contentsOf: shaderSamples)
+        if let inspectObjectIndex {
+            if selectedObjectExtracted {
+                result.append(contentsOf: forensicReport)
+            } else {
+                result.append("shader_object_forensic_error|object_index_\(inspectObjectIndex)_not_found_as_shader")
+            }
+        }
         if shaderObjects == 0 {
             result.append("unity_shader_note|No Shader class objects were present in this SerializedFile.")
         }
         return result
+    }
+
+    /// Produces a bounded structural inventory of one raw Unity Shader object.
+    /// String hits are clues only; they are not claimed to be executable programs.
+    private static func inspectShaderObjectBytes(_ data: Data, objectIndex: Int, outputURL: URL) -> [String] {
+        let bytes = [UInt8](data)
+        let preview = bytes.prefix(64).map { String(format: "%02x", $0) }.joined()
+        var strings: [(offset: Int, value: String)] = []
+        var cursor = 0
+        while cursor < bytes.count && strings.count < 160 {
+            if bytes[cursor] >= 0x20 && bytes[cursor] <= 0x7e {
+                let start = cursor
+                while cursor < bytes.count && bytes[cursor] >= 0x20 && bytes[cursor] <= 0x7e {
+                    cursor += 1
+                }
+                if cursor - start >= 4 {
+                    strings.append((start, String(decoding: bytes[start..<cursor], as: UTF8.self)))
+                }
+            } else {
+                cursor += 1
+            }
+        }
+        let markers = ["SubProgram", "m_Program", "m_Programs", "GpuProgram", "ShaderBlob",
+                       "SerializedShader", "m_ParsedForm", "keywords", "Keywords", "Pass",
+                       "Vertex", "Fragment", "Compute", "Metal", "GLSL", "SPIR-V"]
+        var markerLines: [String] = []
+        for marker in markers {
+            let offsets = strings.filter { $0.value.localizedCaseInsensitiveContains(marker) }
+                .prefix(8).map { String($0.offset) }
+            if !offsets.isEmpty {
+                markerLines.append("shader_object_marker|\(marker)|offsets=\(offsets.joined(separator: ","))")
+            }
+        }
+        let stringLines = strings.prefix(80).map { item in
+            let safe = item.value.replacingOccurrences(of: "|", with: "_")
+                .replacingOccurrences(of: "\\n", with: " ").replacingOccurrences(of: "\\r", with: " ")
+            return "shader_object_ascii|offset=\(item.offset)|text=\(safe.prefix(120))"
+        }
+        return [
+            "shader_object_forensic|object_index=\(objectIndex)|bytes=\(bytes.count)|raw_file=\(outputURL.lastPathComponent)",
+            "shader_object_prefix_hex|\(preview)",
+            "shader_object_ascii_summary|strings_found_at_least_4_bytes=\(strings.count)|reported=\(min(strings.count, 80))"
+        ] + markerLines + stringLines
     }
 
     private static func readBE32(_ bytes: [UInt8], _ position: Int) -> UInt32? {
