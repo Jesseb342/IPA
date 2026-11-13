@@ -560,7 +560,7 @@ enum UnityShaderSourceScanner {
 
         var shaderObjects = 0
         var shaderSamples: [String] = []
-        for _ in 0..<objectCount {
+        for objectIndex in 0..<objectCount {
             cursor = (cursor + 3) & ~3
             guard cursor <= bytes.count, 20 <= bytes.count - cursor,
                   let startRaw = readLE32(cursor + 8),
@@ -575,9 +575,7 @@ enum UnityShaderSourceScanner {
             let classID = classIDs[typeIndex]
             if classID == 48 {
                 shaderObjects += 1
-                if shaderSamples.count < 8 {
-                    shaderSamples.append("shader_object_candidate|data_offset=\(startRaw)|bytes=\(sizeRaw)|type_index=\(typeIndex)")
-                }
+                shaderSamples.append("shader_object_candidate|object_index=\(objectIndex)|data_offset=\(startRaw)|bytes=\(sizeRaw)|type_index=\(typeIndex)")
             }
             cursor += 20
         }
@@ -588,7 +586,7 @@ enum UnityShaderSourceScanner {
         ]
         result.append(contentsOf: shaderSamples)
         if shaderObjects == 0 {
-            result.append("unity_shader_note|No Shader class objects were present in this small CAB sample.")
+            result.append("unity_shader_note|No Shader class objects were present in this SerializedFile.")
         }
         return result
     }
