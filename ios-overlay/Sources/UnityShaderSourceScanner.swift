@@ -511,9 +511,13 @@ enum UnityShaderSourceScanner {
             }
         }
 
-        cursor = (cursor + 3) & ~3
-        guard let objectCountRaw = readLE32(cursor) else {
-            return ["unity_serialized_metadata_error|missing_object_count"]
+        // Unity 5.5–2018.4 (format 17) places m_ObjectCount immediately
+        // after the type array. Do NOT align here: AssetStudio's format-17
+        // reader consumes this Int32 at the current cursor. Object records
+        // themselves are aligned individually below (path IDs are 64-bit).
+        let objectCountOffset = cursor
+        guard let objectCountRaw = readLE32(objectCountOffset) else {
+            return ["unity_serialized_metadata_error|missing_object_count|offset=\(objectCountOffset)"]
         }
         cursor += 4
         let objectCount = Int(Int32(bitPattern: objectCountRaw))
@@ -546,8 +550,8 @@ enum UnityShaderSourceScanner {
         }
 
         var result = [
-            "unity_serialized_metadata|unity_version=\(unityVersion)|target_platform=\(Int32(bitPattern: targetRaw))|type_tree=\(hasTypeTree)|types=\(typeCount)|objects=\(objectCount)|shader_types=\(shaderTypes)|shader_objects=\(shaderObjects)",
-            "unity_serialized_metadata_check|type_table_bounds=true|object_table_bounds=true|format=17"
+            "unity_serialized_metadata|unity_version=\(unityVersion)|target_platform=\(Int32(bitPattern: targetRaw))|type_tree=\(hasTypeTree)|types=\(typeCount)|objects=\(objectCount)|object_count_offset=\(objectCountOffset)|shader_types=\(shaderTypes)|shader_objects=\(shaderObjects)",
+            "unity_serialized_metadata_check|type_table_bounds=true|object_table_bounds=true|object_count_unaligned=true|format=17"
         ]
         result.append(contentsOf: shaderSamples)
         if shaderObjects == 0 {
