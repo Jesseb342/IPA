@@ -94,7 +94,7 @@ enum UnityShaderSourceScanner {
         ]
         var shaderForensicBudgetRemaining = 32 * 1024 * 1024
         var report: [String] = [
-            "unityfs_scanner_revision|unity2017-shader-blob-table-probe-v8",
+            "unityfs_scanner_revision|unity2017-serialized-program-record-parser-v9",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
