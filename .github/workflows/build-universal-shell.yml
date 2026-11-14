@@ -278,7 +278,7 @@ jobs:
           echo "UnityFS scanner copied SHA256:"
           shasum -a 256 dm/ios/Sources/UnityShaderSourceScanner.swift
           cmp ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift dm/ios/Sources/UnityShaderSourceScanner.swift
-          grep -q 'unityfs_scanner_revision|prioritize-main-assets-v5-multi-object-shader-batch' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'unityfs_scanner_revision|prioritize-main-assets-v6-distributed-shader-forensics' dm/ios/Sources/UnityShaderSourceScanner.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
@@ -290,6 +290,9 @@ jobs:
           grep -q 'inspectShaderObjectBytes' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'shader_object_batch_summary' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'shader_object_marker' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'shader_object_ascii_sample' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'shader_object_ascii_tail' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'markerCounts' dm/ios/Sources/UnityShaderSourceScanner.swift
           swiftc -frontend -parse dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'enum ShaderTranslatorBridge' dm/ios/Sources/ImportScreen.swift
           grep -q 'nxn_translate_shader_jobs' dm/ios/Sources/ImportScreen.swift
@@ -331,8 +334,8 @@ jobs:
           plan = """Cuphead shader investigation — immediate next steps
           1. Inspect all 25 Shader objects (indices 129–153) in Data/resources.assets.
           2. On the iPhone, save each bounded raw object to Documents/PreparedGame/ShaderSources/resources-assets-shader-object-<index>.bin, subject to the 32 MB aggregate cap.
-          3. Compare each object's prefix, printable strings, metadata markers, binary signatures, and byte profile to identify the best candidate for Unity Shader schema decoding.
-          4. Use the resulting report and raw object layout to identify Unity metadata boundaries versus actual shader program payloads; do not treat string hits as proof of executable code.
+          3. Compare each object's prefix, byte profile, binary signatures, marker hit counts, and printable strings sampled from the beginning, evenly spaced offsets, and end of the full object.
+          4. Use distributed string samples and marker frequencies to identify likely Unity Shader metadata boundaries and candidate program records; do not treat string hits as proof of executable code.
           5. Parse the confirmed serialized program records, extract Switch shader machine code and metadata, and build translator job JSON.
           6. Run the embedded Ryujinx translator on-device, then compile generated Metal source with Apple's Metal compiler.
           7. Verify the first real Cuphead shader output and preserve a copyable diagnostic report.
