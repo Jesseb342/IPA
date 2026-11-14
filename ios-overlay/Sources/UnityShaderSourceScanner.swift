@@ -94,7 +94,9 @@ enum UnityShaderSourceScanner {
         ]
         var shaderForensicBudgetRemaining = 32 * 1024 * 1024
         var report: [String] = [
-            "unityfs_scanner_revision|unity2017-shader-payload-profile-v10",
+            "unityfs_scanner_revision|unity2017-shader-payload-profile-v11-distributed",
+            "scan_id|\(UUID().uuidString)",
+            "scan_started_utc|\(ISO8601DateFormatter().string(from: Date()))",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
@@ -1007,6 +1009,11 @@ enum UnityShaderSourceScanner {
         var typeCounts: [Int32: Int] = [:]
         var lengthCounts: [Int: Int] = [:]
         var samples: [String] = []
+        var payloadHashes = Set<String>()
+        let profileLimit = min(64, count)
+        let profileIndices = Set((0..<profileLimit).map { slot in
+            min(count - 1, ((2 * slot + 1) * count) / (2 * profileLimit))
+        })
         let maxSavedRecords = 64
         let maxSavedBytes = 8 * 1024 * 1024
         let signatures: [(String, [UInt8])] = [
@@ -1085,6 +1092,14 @@ enum UnityShaderSourceScanner {
             if codeLength > 0 {
                 codeRecords += 1
                 let payload = Array(bytes[cursor..<(cursor + codeLength)])
+                // FNV-1a 64-bit fingerprint, deterministic on every supported iOS version.
+                var fingerprint: UInt64 = 0xcbf29ce484222325
+                for byte in payload {
+                    fingerprint ^= UInt64(byte)
+                    fingerprint = fingerprint &* 0x100000001b3
+                }
+                let payloadHash = String(format: "%016llx", fingerprint)
+                payloadHashes.insert(payloadHash)
                 let zeroCount = payload.reduce(into: 0) { if $1 == 0 { $0 += 1 } }
                 let printableCount = payload.reduce(into: 0) {
                     if $1 >= 0x20 && $1 <= 0x7e { $0 += 1 }
@@ -1096,14 +1111,14 @@ enum UnityShaderSourceScanner {
                             payload[position..<(position + magic.count)].elementsEqual(magic)
                     }) ? name : nil
                 }.joined(separator: ",")
-                if samples.count < 24 {
+                if profileIndices.contains(index) {
                     let keywordText = keywords.map { safe($0) }.joined(separator: ",")
                     let firstAscii = String(decoding: payload.prefix(96).map {
                         ($0 >= 0x20 && $0 <= 0x7e) ? $0 : 0x2e
                     }, as: UTF8.self)
                     let nonzeroHex = firstNonzero >= 0 ? hex(payload, firstNonzero, 48) : "none"
                     samples.append(
-                        "serialized_program_profile|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|index=\(index)|version=\(version)|gpu_program_type=\(programType)|keywords=\(keywordCount)|keyword_sample=\(keywordText)|code_bytes=\(codeLength)|zero_bytes=\(zeroCount)|zero_pct=\(String(format: "%.1f", Double(zeroCount) * 100.0 / Double(codeLength)))|printable_pct=\(String(format: "%.1f", Double(printableCount) * 100.0 / Double(codeLength)))|first_nonzero=\(firstNonzero)|prefix=\(hex(payload, 0, 32))|nonzero_hex=\(nonzeroHex)|ascii_preview=\(safe(firstAscii))|signatures=\(signatureHits.isEmpty ? "none" : signatureHits)"
+                        "serialized_program_profile|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|index=\(index)|version=\(version)|gpu_program_type=\(programType)|keywords=\(keywordCount)|keyword_sample=\(keywordText)|code_bytes=\(codeLength)|zero_bytes=\(zeroCount)|zero_pct=\(String(format: "%.1f", Double(zeroCount) * 100.0 / Double(codeLength)))|printable_pct=\(String(format: "%.1f", Double(printableCount) * 100.0 / Double(codeLength)))|first_nonzero=\(firstNonzero)|fnv1a64=\(payloadHash)|prefix=\(hex(payload, 0, 32))|nonzero_hex=\(nonzeroHex)|ascii_preview=\(safe(firstAscii))|signatures=\(signatureHits.isEmpty ? "none" : signatureHits)"
                     )
                 }
                 if savedRecords < maxSavedRecords && codeLength <= maxSavedBytes - savedBytes {
@@ -1130,7 +1145,7 @@ enum UnityShaderSourceScanner {
             "serialized_program_parse|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|count=\(count)|valid_records=\(validRecords)|code_records=\(codeRecords)|failures=\(failures)|entry_size=\(entrySize)|status=\(validRecords == count ? "all_records_parsed" : "partial")",
             "serialized_program_types|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|counts=\(types)|saved_code_records=\(savedRecords)|saved_code_bytes=\(savedBytes)|local_only=true",
             "serialized_program_code_lengths|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|unique_lengths=\(lengthCounts.count)|distribution=\(lengthSummary)|truncated=\(lengthCounts.count > 20)",
-            "serialized_program_profile_summary|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|profiled_code_records=\(codeRecords)|sampled_profiles=\(samples.count)|local_only=true"
+            "serialized_program_profile_summary|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|profiled_code_records=\(codeRecords)|sampled_profiles=\(samples.count)|sample_strategy=evenly_spaced_record_indices|unique_payload_hashes=\(payloadHashes.count)|duplicate_payload_records=\(max(0, codeRecords - payloadHashes.count))|local_only=true"
         ] + samples
     }
 
