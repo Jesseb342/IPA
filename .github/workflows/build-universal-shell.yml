@@ -288,7 +288,7 @@ jobs:
           grep -q 'format17Uses64BitPathID' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'inspectObjectIndices: Set<Int>?' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'inspectShaderObjectBytes' dm/ios/Sources/UnityShaderSourceScanner.swift
-          grep -q 'resources-assets-shader-object-\\(objectIndex).bin' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'shader_object_batch_summary' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'shader_object_marker' dm/ios/Sources/UnityShaderSourceScanner.swift
           swiftc -frontend -parse dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'enum ShaderTranslatorBridge' dm/ios/Sources/ImportScreen.swift
