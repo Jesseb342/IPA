@@ -278,7 +278,7 @@ jobs:
           echo "UnityFS scanner copied SHA256:"
           shasum -a 256 dm/ios/Sources/UnityShaderSourceScanner.swift
           cmp ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift dm/ios/Sources/UnityShaderSourceScanner.swift
-          grep -q 'unityfs_scanner_revision|prioritize-all-serialized-shader-objects-v7' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'unityfs_scanner_revision|unity2017-shader-blob-table-probe-v8' dm/ios/Sources/UnityShaderSourceScanner.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
