@@ -639,41 +639,53 @@ enum UnityShaderSourceScanner {
     private static func inspectShaderObjectBytes(_ data: Data, objectIndex: Int, outputURL: URL) -> [String] {
         let bytes = [UInt8](data)
         let preview = bytes.prefix(64).map { String(format: "%02x", $0) }.joined()
+        let markers = ["SubProgram", "m_Program", "m_Programs", "GpuProgram", "ShaderBlob",
+                       "SerializedShader", "m_ParsedForm", "keywords", "Keywords", "Pass",
+                       "Vertex", "Fragment", "Compute", "Metal", "GLSL", "SPIR-V"]
+        var markerOffsets: [String: [Int]] = [:]
         var strings: [(offset: Int, value: String)] = []
+        var totalStrings = 0
         var cursor = 0
-        while cursor < bytes.count && strings.count < 160 {
+
+        // Scan the entire object, not just its first 160 strings. The first part
+        // of a Unity Shader object is often property metadata; executable program
+        // records can occur much later in a multi-megabyte object.
+        while cursor < bytes.count {
             if bytes[cursor] >= 0x20 && bytes[cursor] <= 0x7e {
                 let start = cursor
                 while cursor < bytes.count && bytes[cursor] >= 0x20 && bytes[cursor] <= 0x7e {
                     cursor += 1
                 }
                 if cursor - start >= 4 {
-                    strings.append((start, String(decoding: bytes[start..<cursor], as: UTF8.self)))
+                    let value = String(bytes: bytes[start..<cursor], encoding: .ascii) ?? ""
+                    totalStrings += 1
+                    if strings.count < 160 {
+                        strings.append((start, value))
+                    }
+                    for marker in markers where markerOffsets[marker, default: []].count < 8 {
+                        if value.localizedCaseInsensitiveContains(marker) {
+                            markerOffsets[marker, default: []].append(start)
+                        }
+                    }
                 }
             } else {
                 cursor += 1
             }
         }
-        let markers = ["SubProgram", "m_Program", "m_Programs", "GpuProgram", "ShaderBlob",
-                       "SerializedShader", "m_ParsedForm", "keywords", "Keywords", "Pass",
-                       "Vertex", "Fragment", "Compute", "Metal", "GLSL", "SPIR-V"]
-        var markerLines: [String] = []
-        for marker in markers {
-            let offsets = strings.filter { $0.value.localizedCaseInsensitiveContains(marker) }
-                .prefix(8).map { String($0.offset) }
-            if !offsets.isEmpty {
-                markerLines.append("shader_object_marker|\(marker)|offsets=\(offsets.joined(separator: ","))")
-            }
+
+        let markerLines = markers.compactMap { marker -> String? in
+            guard let offsets = markerOffsets[marker], !offsets.isEmpty else { return nil }
+            return "shader_object_marker|\\(marker)|offsets=\\(offsets.map(String.init).joined(separator: ","))"
         }
         let stringLines = strings.prefix(80).map { item in
             let safe = item.value.replacingOccurrences(of: "|", with: "_")
                 .replacingOccurrences(of: "\\n", with: " ").replacingOccurrences(of: "\\r", with: " ")
-            return "shader_object_ascii|offset=\(item.offset)|text=\(safe.prefix(120))"
+            return "shader_object_ascii|offset=\\(item.offset)|text=\\(safe.prefix(120))"
         }
         return [
-            "shader_object_forensic|object_index=\(objectIndex)|bytes=\(bytes.count)|raw_file=\(outputURL.lastPathComponent)",
-            "shader_object_prefix_hex|\(preview)",
-            "shader_object_ascii_summary|strings_sampled_up_to_160=\(strings.count)|reported=\(min(strings.count, 80))"
+            "shader_object_forensic|object_index=\\(objectIndex)|bytes=\\(bytes.count)|raw_file=\\(outputURL.lastPathComponent)",
+            "shader_object_prefix_hex|\\(preview)",
+            "shader_object_ascii_summary|total_strings_scanned=\\(totalStrings)|stored_first=\\(strings.count)|reported=\\(min(strings.count, 80))"
         ] + markerLines + stringLines
     }
 
