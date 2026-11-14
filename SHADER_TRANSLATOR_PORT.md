@@ -219,3 +219,34 @@ The workflow source-validation check now requires the v10 scanner revision.
 For object 142, the new B report should distinguish between an all-zero/mostly-zero payload and a structured binary whose meaningful bytes begin after a zero-filled header. The length distribution will show whether the 2,912-byte sample size is representative or whether there are multiple code layouts. Signature hits are exploratory only; no signature match does not mean the payload is invalid.
 
 **Verification status:** source and workflow validation are committed, but this revision has not yet been built or run on-device. The build remains a manual `workflow_dispatch`; after dispatch, install the resulting IPA and rerun the shader scan to generate a new B report. Do not interpret the v10 source commit as a successful build or as evidence that a shader has translated.
+
+
+## B report: v10 payload profiling result — 2026-11-14
+
+The current repository `B` file is a fresh v10 report (6,723 lines; 1,109,090 bytes), not the previous v9 report. It identifies scanner revision `unity2017-shader-payload-profile-v10`.
+
+### Confirmed results
+
+- Inventory: 543 files, 286 UnityFS bundles, 82 direct SerializedFile scans covering 249,390,016 bytes.
+- 65 shader-program chunks decoded and 65 SerializedProgram tables parsed.
+- 5,698/5,698 records parsed successfully; zero failures. All 5,698 records contain program-code payloads and report GPU program type 26.
+- The report contains 534 payload profiles. The profiler samples at most 24 payloads per chunk, so this is a bounded sample, not all 5,698 payloads.
+- The sampled payloads have 26 distinct lengths, from 2,400 to 11,104 bytes. The most frequent sampled sizes are 2,912 bytes (260 samples), 3,168 bytes (86), 2,656 bytes (74), and 3,424 / 3,680 bytes (23 each).
+- All 534 sampled payloads report `signatures=none` for the scanner's SPIR-V, DXBC, DXIL, MTLB, SHDR, and NVN marker checks.
+
+### What the payload profiles reveal
+
+The samples are not random-looking byte arrays. They repeatedly share a structured leading sequence. Common examples begin:
+
+- `0000000000000000500800000003000034127698010000000f00000020010000`
+- `0100000000000000500800000002000034127698010000000f00000020010000`
+
+The eight-byte zero prefix seen in the earlier v9 samples is therefore not the whole story: other records begin with a 32-bit `1` followed by zeros, and the first nonzero byte can be at offset 0 or 8. The repeated fields after that prefix (including the `0x0850`, small count/version-like values, and repeated fixed words) strongly suggest an internal container/header or structured instruction representation. That is a useful lead, but the profile alone does not establish the field meanings or prove that these bytes are directly executable shader machine code.
+
+### Interpretation
+
+The v10 result validates the bounded record parser against all 5,698 records and gives us a repeatable payload fingerprint. It does **not** yet identify the actual console shader encoding, establish that the payload is NVN, or demonstrate a successful translation. The absence of the six tested signatures is not proof that the payload is invalid; those checks only look for those literal markers.
+
+Do not send these type-26 payloads to the SPIR-V/NxNative translator yet. The next step is to identify the repeated payload header/layout using the locally saved representative payloads, map its fields and instruction encoding against a known Unity 2017.4 console shader format, and only then write a format-specific decoder or translator adapter. Keep all game files and extracted payload bytes on-device; the B report contains only bounded metadata and previews.
+
+**Verification status:** this B report confirms that the installed v10 scanner executed and completed the structural parse/profile pass. It does not confirm that the v10 IPA build workflow itself succeeded unless the corresponding Actions build result is checked separately, and it does not confirm shader translation or rendering.
