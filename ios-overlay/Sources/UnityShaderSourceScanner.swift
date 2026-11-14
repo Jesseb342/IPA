@@ -558,17 +558,10 @@ enum UnityShaderSourceScanner {
             }
         }
 
-        // In format 17, bigIDEnabled follows the type array and controls
-        // both pathID width and the 4-byte alignment before 64-bit pathIDs.
-        // m_ObjectCount immediately follows this flag; do not align here.
-        guard let bigIDRaw = readLE32(cursor) else {
-            return ["unity_serialized_metadata_error|missing_big_id_enabled"]
-        }
-        cursor += 4
-        let bigIDEnabled = bigIDRaw != 0
-        guard bigIDRaw <= 1 else {
-            return ["unity_serialized_metadata_error|invalid_big_id_enabled_\(bigIDRaw)"]
-        }
+        // Format 17 is newer than Unknown_14. The legacy big-ID field
+        // exists only in formats 7 through 13. Format 17 starts its object
+        // table immediately after the type table and uses aligned Int64 pathIDs.
+        let format17Uses64BitPathID = true
         let objectCountOffset = cursor
         guard let objectCountRaw = readLE32(objectCountOffset) else {
             return ["unity_serialized_metadata_error|missing_object_count|offset=\(objectCountOffset)"]
@@ -584,8 +577,8 @@ enum UnityShaderSourceScanner {
         var forensicReport: [String] = []
         var selectedObjectExtracted = false
         for objectIndex in 0..<objectCount {
-            if bigIDEnabled { cursor = (cursor + 3) & ~3 }
-            let pathIDWidth = bigIDEnabled ? 8 : 4
+            if format17Uses64BitPathID { cursor = (cursor + 3) & ~3 }
+            let pathIDWidth = format17Uses64BitPathID ? 8 : 4
             let recordBytes = pathIDWidth + 12
             guard cursor >= 0, cursor <= bytes.count, recordBytes <= bytes.count - cursor,
                   let startRaw = readLE32(cursor + pathIDWidth),
@@ -624,7 +617,7 @@ enum UnityShaderSourceScanner {
         }
 
         var result = [
-            "unity_serialized_metadata|unity_version=\(unityVersion)|target_platform=\(Int32(bitPattern: targetRaw))|type_tree=\(hasTypeTree)|types=\(typeCount)|objects=\(objectCount)|object_count_offset=\(objectCountOffset)|big_id_enabled=\(bigIDEnabled)|path_id_bytes=\(bigIDEnabled ? 8 : 4)|shader_types=\(shaderTypes)|shader_objects=\(shaderObjects)",
+            "unity_serialized_metadata|unity_version=\(unityVersion)|target_platform=\(Int32(bitPattern: targetRaw))|type_tree=\(hasTypeTree)|types=\(typeCount)|objects=\(objectCount)|object_count_offset=\(objectCountOffset)|format17_path_id_bytes=\(format17Uses64BitPathID ? 8 : 4)|shader_types=\(shaderTypes)|shader_objects=\(shaderObjects)",
             "unity_serialized_metadata_check|type_table_bounds=true|object_table_bounds=true|object_count_unaligned=true|format=17|path_id_layout_checked=true"
         ]
         result.append(contentsOf: shaderSamples)
