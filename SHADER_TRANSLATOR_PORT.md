@@ -122,3 +122,30 @@ The repository's latest `Update B` commit is [70d3b8c6](https://github.com/Jesse
 The current report remains 5,799 lines / 717,165 characters, with 65 extracted Shader objects totaling 5,786,672 bytes. Its tested raw signatures remain zero for SPIR-V, DXBC, MTLB, DXIL, and SHDR. It still contains no parsed `compressedBlob` records, platform/offset/length tables, decompressed ShaderProgram records, or stage-code extraction. The large `Data/resources.assets` object 142 remains a useful parser target, but the report itself has not advanced the extraction milestone.
 
 **Interpretation:** this latest B upload is a repository update, not a new scan result. Do not restart signature hunting or mark shader extraction complete. The next useful B report should come from the Unity 2017.4.9f1 serialized Shader parser and show validated bounded program records and stage payloads. Separately, the NativeAOT JSON remediation in `e6a1c687` still needs a manually dispatched build before it can be called verified.
+
+
+## Unity 2017 Shader blob-table probe — 2026-11-14
+
+The on-device scanner now has a first bounded extraction pass after raw Shader-object extraction. It searches each Shader object for the Unity 5.5–2019 serialized tail sequence used by Unity 2017.4:
+
+1. `platforms[]`
+2. `offsets[]`
+3. `compressedLengths[]`
+4. `decompressedLengths[]`
+5. `compressedBlob[]`
+
+A candidate is considered only when the platform count is bounded, platform enum values are plausible, all four array counts agree, every offset/length pair fits inside the declared blob, and the declared blob fits inside the object. The scanner then attempts raw-LZ4 decompression for each bounded chunk. A decoded chunk is written locally only when its output size matches the declared decompressed length and its leading SerializedProgram subprogram count is plausible. The report records the platform, offset, compressed/decompressed sizes, subprogram count, and local output filename.
+
+This is deliberately a structural probe rather than a complete Unity Shader parser. It does not yet decode the full `m_ParsedForm` hierarchy, map each subprogram to a vertex/fragment pass, or validate the internal code payload format. A plausible table plus successful LZ4/header checks is meaningful new evidence, but it is not yet proof of a usable Switch shader or a successful Ryujinx translation.
+
+### How to validate the next B report
+
+After building and installing the updated IPA, run the existing shader-source scan again. For the large `Data/resources.assets` Shader object 142, look for:
+
+- `shader_program_blob_layout|...|status=validated_candidate`
+- one or more `shader_program_chunk|...|status=decoded` lines
+- matching local files under `Documents/PreparedGame/ShaderSources/ShaderPrograms/`
+
+If the report says `no_bounded_layout_candidate`, the serialized tail layout or array alignment assumption needs correction. If it finds candidates but no valid LZ4/program header, inspect the candidate offsets and decompression result before changing the format assumptions. Object 143 remains the smaller cross-check.
+
+**Verification status:** source committed; not yet built or run on-device. The Actions workflow is manually dispatched, and a fresh B report requires the user to install the new IPA and rerun the scan. Do not describe the scanner as having extracted Cuphead shader programs until a new B report confirms decoded chunks.
