@@ -955,33 +955,48 @@ enum UnityShaderSourceScanner {
             return Int32(bitPattern: raw)
         }
         func aligned(_ position: Int) -> Int? {
-            guard position <= Int.max - 3 else { return nil }
+            guard position >= 0, position <= Int.max - 3 else { return nil }
             return (position + 3) & ~3
         }
         func safe(_ value: String) -> String {
             value.replacingOccurrences(of: "|", with: "_")
-                .replacingOccurrences(of: "\n", with: " ")
-                .replacingOccurrences(of: "\r", with: " ")
+                .replacingOccurrences(of: "\\n", with: " ")
+                .replacingOccurrences(of: "\\r", with: " ")
+        }
+        func hex(_ source: [UInt8], _ start: Int, _ count: Int) -> String {
+            guard start >= 0, start < source.count, count > 0 else { return "" }
+            return source[start..<min(source.count, start + count)]
+                .map { String(format: "%02x", $0) }.joined()
         }
 
         guard let rawCount = i32(0), rawCount > 0, rawCount <= 100_000 else {
-            return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=invalid_subprogram_count"]
+            return ["serialized_program_parse|object_index=\\(objectIndex)|chunk=\\(chunkIndex)|status=invalid_subprogram_count"]
         }
         let count = Int(rawCount)
         let entrySize = 8 // Unity 2017.4; UnityPy uses 12 bytes only from 2019.3 onward.
         let tableEnd = 4 + count * entrySize
         guard tableEnd >= 4, tableEnd <= bytes.count else {
-            return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=offset_table_out_of_bounds|count=\(count)|bytes=\(bytes.count)"]
+            return ["serialized_program_parse|object_index=\\(objectIndex)|chunk=\\(chunkIndex)|status=offset_table_out_of_bounds|count=\\(count)|bytes=\\(bytes.count)"]
         }
 
         var offsets: [Int] = []
         offsets.reserveCapacity(count)
+        var seenOffsets = Set<Int>()
         for index in 0..<count {
             guard let rawOffset = i32(4 + index * entrySize), rawOffset >= Int32(tableEnd),
-                  Int(rawOffset) < bytes.count else {
-                return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=invalid_record_offset|index=\(index)"]
+                  Int(rawOffset) < bytes.count, seenOffsets.insert(Int(rawOffset)).inserted else {
+                return ["serialized_program_parse|object_index=\\(objectIndex)|chunk=\\(chunkIndex)|status=invalid_or_duplicate_record_offset|index=\\(index)"]
             }
             offsets.append(Int(rawOffset))
+        }
+
+        // Bound each record by the next physical record, not by the whole chunk.
+        // This prevents a malformed length in one record from consuming the next record.
+        let sortedOffsets = offsets.sorted()
+        var recordLimits: [Int: Int] = [:]
+        for index in sortedOffsets.indices {
+            recordLimits[sortedOffsets[index]] = index + 1 < sortedOffsets.count
+                ? sortedOffsets[index + 1] : bytes.count
         }
 
         var validRecords = 0
@@ -990,21 +1005,39 @@ enum UnityShaderSourceScanner {
         var savedBytes = 0
         var failures = 0
         var typeCounts: [Int32: Int] = [:]
+        var lengthCounts: [Int: Int] = [:]
         var samples: [String] = []
         let maxSavedRecords = 64
         let maxSavedBytes = 8 * 1024 * 1024
+        let signatures: [(String, [UInt8])] = [
+            ("SPIRV", [0x03, 0x02, 0x23, 0x07]),
+            ("DXBC", Array("DXBC".utf8)),
+            ("DXIL", Array("DXIL".utf8)),
+            ("MTLB", Array("MTLB".utf8)),
+            ("SHDR", Array("SHDR".utf8)),
+            ("NVN", Array("NVN".utf8))
+        ]
 
         for index in 0..<count {
-            var cursor = offsets[index]
-            guard let version = i32(cursor), let programType = i32(cursor + 4) else {
+            let recordStart = offsets[index]
+            guard let recordEnd = recordLimits[recordStart], recordEnd > recordStart else {
+                failures += 1
+                continue
+            }
+            var cursor = recordStart
+            func fits(_ position: Int, _ length: Int) -> Bool {
+                position >= recordStart && length >= 0 &&
+                    position <= recordEnd && length <= recordEnd - position
+            }
+            guard fits(cursor, 24), let version = i32(cursor), let programType = i32(cursor + 4) else {
                 failures += 1
                 continue
             }
             cursor += 20 // version + program type + 12 bytes of platform-specific metadata
             if version >= 201_608_170 { cursor += 4 }
 
-            guard let keywordCountRaw = i32(cursor), keywordCountRaw >= 0,
-                  keywordCountRaw <= 4096 else {
+            guard fits(cursor, 4), let keywordCountRaw = i32(cursor),
+                  keywordCountRaw >= 0, keywordCountRaw <= 4096 else {
                 failures += 1
                 continue
             }
@@ -1013,14 +1046,14 @@ enum UnityShaderSourceScanner {
             var keywords: [String] = []
             var recordValid = true
             for _ in 0..<keywordCount {
-                guard let lengthRaw = i32(cursor), lengthRaw >= 0,
-                      lengthRaw <= 64 * 1024 else {
+                guard fits(cursor, 4), let lengthRaw = i32(cursor),
+                      lengthRaw >= 0, lengthRaw <= 64 * 1024 else {
                     recordValid = false
                     break
                 }
                 let length = Int(lengthRaw)
                 cursor += 4
-                guard cursor <= bytes.count, length <= bytes.count - cursor else {
+                guard fits(cursor, length) else {
                     recordValid = false
                     break
                 }
@@ -1028,41 +1061,59 @@ enum UnityShaderSourceScanner {
                     keywords.append(String(decoding: bytes[cursor..<(cursor + length)], as: UTF8.self))
                 }
                 cursor += length
-                guard let next = aligned(cursor), next <= bytes.count else {
+                guard let next = aligned(cursor), next <= recordEnd else {
                     recordValid = false
                     break
                 }
                 cursor = next
             }
-            guard recordValid, let codeLengthRaw = i32(cursor), codeLengthRaw >= 0,
-                  codeLengthRaw <= 16 * 1024 * 1024 else {
+            guard recordValid, fits(cursor, 4), let codeLengthRaw = i32(cursor),
+                  codeLengthRaw >= 0, codeLengthRaw <= 16 * 1024 * 1024 else {
                 failures += 1
                 continue
             }
             let codeLength = Int(codeLengthRaw)
             cursor += 4
-            guard cursor <= bytes.count, codeLength <= bytes.count - cursor else {
+            guard fits(cursor, codeLength) else {
                 failures += 1
                 continue
             }
 
             validRecords += 1
             typeCounts[programType, default: 0] += 1
+            lengthCounts[codeLength, default: 0] += 1
             if codeLength > 0 {
                 codeRecords += 1
+                let payload = Array(bytes[cursor..<(cursor + codeLength)])
+                let zeroCount = payload.reduce(into: 0) { if $1 == 0 { $0 += 1 } }
+                let printableCount = payload.reduce(into: 0) {
+                    if $1 >= 0x20 && $1 <= 0x7e { $0 += 1 }
+                }
+                let firstNonzero = payload.firstIndex(where: { $0 != 0 }) ?? -1
+                let signatureHits = signatures.compactMap { name, magic in
+                    payload.indices.contains(where: { position in
+                        position + magic.count <= payload.count &&
+                            payload[position..<(position + magic.count)].elementsEqual(magic)
+                    }) ? name : nil
+                }.joined(separator: ",")
                 if samples.count < 24 {
                     let keywordText = keywords.map { safe($0) }.joined(separator: ",")
-                    let prefix = bytes[cursor..<min(cursor + 8, cursor + codeLength)]
-                        .map { String(format: "%02x", $0) }.joined()
-                    samples.append("serialized_program_record|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|index=\(index)|version=\(version)|gpu_program_type=\(programType)|keywords=\(keywordCount)|keyword_sample=\(keywordText)|code_bytes=\(codeLength)|code_prefix=\(prefix)|status=parsed")
+                    let firstAscii = String(decoding: payload.prefix(96).map {
+                        ($0 >= 0x20 && $0 <= 0x7e) ? $0 : 0x2e
+                    }, as: UTF8.self)
+                    let nonzeroHex = firstNonzero >= 0 ? hex(payload, firstNonzero, 48) : "none"
+                    samples.append(
+                        "serialized_program_profile|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|index=\\(index)|version=\\(version)|gpu_program_type=\\(programType)|keywords=\\(keywordCount)|keyword_sample=\\(keywordText)|code_bytes=\\(codeLength)|zero_bytes=\\(zeroCount)|zero_pct=\\(String(format: "%.1f", Double(zeroCount) * 100.0 / Double(codeLength)))|printable_pct=\\(String(format: "%.1f", Double(printableCount) * 100.0 / Double(codeLength)))|first_nonzero=\\(firstNonzero)|prefix=\\(hex(payload, 0, 32))|nonzero_hex=\\(nonzeroHex)|ascii_preview=\\(safe(firstAscii))|signatures=\\(signatureHits.isEmpty ? "none" : signatureHits)"
+                    )
                 }
                 if savedRecords < maxSavedRecords && codeLength <= maxSavedBytes - savedBytes {
                     do {
-                        try FileManager.default.createDirectory(at: outputDirectory.appendingPathComponent("ProgramCode", isDirectory: true),
-                                                                withIntermediateDirectories: true)
-                        let codeURL = outputDirectory.appendingPathComponent("ProgramCode", isDirectory: true)
-                            .appendingPathComponent("\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(index)-t\(programType).bin")
-                        try Data(bytes[cursor..<(cursor + codeLength)]).write(to: codeURL, options: .atomic)
+                        let codeDirectory = outputDirectory.appendingPathComponent("ProgramCode", isDirectory: true)
+                        try FileManager.default.createDirectory(at: codeDirectory, withIntermediateDirectories: true)
+                        let codeURL = codeDirectory.appendingPathComponent(
+                            "\\(outputBaseName)-p\\(platform)-c\\(chunkIndex)-s\\(index)-t\\(programType).bin"
+                        )
+                        try Data(payload).write(to: codeURL, options: .atomic)
                         savedRecords += 1
                         savedBytes += codeLength
                     } catch {
@@ -1072,14 +1123,18 @@ enum UnityShaderSourceScanner {
             }
         }
 
-        let types = typeCounts.keys.sorted().map { "\($0):\(typeCounts[$0] ?? 0)" }.joined(separator: ",")
+        let types = typeCounts.keys.sorted().map { "\\($0):\\(typeCounts[$0] ?? 0)" }.joined(separator: ",")
+        let lengths = lengthCounts.keys.sorted().map { "\\($0):\\(lengthCounts[$0] ?? 0)" }
+        let lengthSummary = lengths.prefix(20).joined(separator: ",")
         return [
-            "serialized_program_parse|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|count=\(count)|valid_records=\(validRecords)|code_records=\(codeRecords)|failures=\(failures)|entry_size=\(entrySize)|status=\(validRecords == count ? "all_records_parsed" : "partial")",
-            "serialized_program_types|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|counts=\(types)|saved_code_records=\(savedRecords)|saved_code_bytes=\(savedBytes)|local_only=true"
+            "serialized_program_parse|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|count=\\(count)|valid_records=\\(validRecords)|code_records=\\(codeRecords)|failures=\\(failures)|entry_size=\\(entrySize)|status=\\(validRecords == count ? "all_records_parsed" : "partial")",
+            "serialized_program_types|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|counts=\\(types)|saved_code_records=\\(savedRecords)|saved_code_bytes=\\(savedBytes)|local_only=true",
+            "serialized_program_code_lengths|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|unique_lengths=\\(lengthCounts.count)|distribution=\\(lengthSummary)|truncated=\\(lengthCounts.count > 20)",
+            "serialized_program_profile_summary|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|profiled_code_records=\\(codeRecords)|sampled_profiles=\\(samples.count)|local_only=true"
         ] + samples
     }
 
-    private static func le32FromData(_ data: Data, _ position: Int) -> UInt32? {
+        private static func le32FromData(_ data: Data, _ position: Int) -> UInt32? {
         guard position >= 0, position <= data.count - 4 else { return nil }
         return UInt32(data[position]) | (UInt32(data[position + 1]) << 8) |
             (UInt32(data[position + 2]) << 16) | (UInt32(data[position + 3]) << 24)
