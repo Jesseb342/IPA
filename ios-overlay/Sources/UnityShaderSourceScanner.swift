@@ -94,7 +94,7 @@ enum UnityShaderSourceScanner {
         ]
         var shaderForensicBudgetRemaining = 32 * 1024 * 1024
         var report: [String] = [
-            "unityfs_scanner_revision|unity2017-serialized-program-record-parser-v9",
+            "unityfs_scanner_revision|unity2017-shader-payload-profile-v10",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
@@ -960,8 +960,8 @@ enum UnityShaderSourceScanner {
         }
         func safe(_ value: String) -> String {
             value.replacingOccurrences(of: "|", with: "_")
-                .replacingOccurrences(of: "\\n", with: " ")
-                .replacingOccurrences(of: "\\r", with: " ")
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
         }
         func hex(_ source: [UInt8], _ start: Int, _ count: Int) -> String {
             guard start >= 0, start < source.count, count > 0 else { return "" }
@@ -970,13 +970,13 @@ enum UnityShaderSourceScanner {
         }
 
         guard let rawCount = i32(0), rawCount > 0, rawCount <= 100_000 else {
-            return ["serialized_program_parse|object_index=\\(objectIndex)|chunk=\\(chunkIndex)|status=invalid_subprogram_count"]
+            return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=invalid_subprogram_count"]
         }
         let count = Int(rawCount)
         let entrySize = 8 // Unity 2017.4; UnityPy uses 12 bytes only from 2019.3 onward.
         let tableEnd = 4 + count * entrySize
         guard tableEnd >= 4, tableEnd <= bytes.count else {
-            return ["serialized_program_parse|object_index=\\(objectIndex)|chunk=\\(chunkIndex)|status=offset_table_out_of_bounds|count=\\(count)|bytes=\\(bytes.count)"]
+            return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=offset_table_out_of_bounds|count=\(count)|bytes=\(bytes.count)"]
         }
 
         var offsets: [Int] = []
@@ -985,7 +985,7 @@ enum UnityShaderSourceScanner {
         for index in 0..<count {
             guard let rawOffset = i32(4 + index * entrySize), rawOffset >= Int32(tableEnd),
                   Int(rawOffset) < bytes.count, seenOffsets.insert(Int(rawOffset)).inserted else {
-                return ["serialized_program_parse|object_index=\\(objectIndex)|chunk=\\(chunkIndex)|status=invalid_or_duplicate_record_offset|index=\\(index)"]
+                return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=invalid_or_duplicate_record_offset|index=\(index)"]
             }
             offsets.append(Int(rawOffset))
         }
@@ -1103,7 +1103,7 @@ enum UnityShaderSourceScanner {
                     }, as: UTF8.self)
                     let nonzeroHex = firstNonzero >= 0 ? hex(payload, firstNonzero, 48) : "none"
                     samples.append(
-                        "serialized_program_profile|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|index=\\(index)|version=\\(version)|gpu_program_type=\\(programType)|keywords=\\(keywordCount)|keyword_sample=\\(keywordText)|code_bytes=\\(codeLength)|zero_bytes=\\(zeroCount)|zero_pct=\\(String(format: "%.1f", Double(zeroCount) * 100.0 / Double(codeLength)))|printable_pct=\\(String(format: "%.1f", Double(printableCount) * 100.0 / Double(codeLength)))|first_nonzero=\\(firstNonzero)|prefix=\\(hex(payload, 0, 32))|nonzero_hex=\\(nonzeroHex)|ascii_preview=\\(safe(firstAscii))|signatures=\\(signatureHits.isEmpty ? "none" : signatureHits)"
+                        "serialized_program_profile|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|index=\(index)|version=\(version)|gpu_program_type=\(programType)|keywords=\(keywordCount)|keyword_sample=\(keywordText)|code_bytes=\(codeLength)|zero_bytes=\(zeroCount)|zero_pct=\(String(format: "%.1f", Double(zeroCount) * 100.0 / Double(codeLength)))|printable_pct=\(String(format: "%.1f", Double(printableCount) * 100.0 / Double(codeLength)))|first_nonzero=\(firstNonzero)|prefix=\(hex(payload, 0, 32))|nonzero_hex=\(nonzeroHex)|ascii_preview=\(safe(firstAscii))|signatures=\(signatureHits.isEmpty ? "none" : signatureHits)"
                     )
                 }
                 if savedRecords < maxSavedRecords && codeLength <= maxSavedBytes - savedBytes {
@@ -1111,7 +1111,7 @@ enum UnityShaderSourceScanner {
                         let codeDirectory = outputDirectory.appendingPathComponent("ProgramCode", isDirectory: true)
                         try FileManager.default.createDirectory(at: codeDirectory, withIntermediateDirectories: true)
                         let codeURL = codeDirectory.appendingPathComponent(
-                            "\\(outputBaseName)-p\\(platform)-c\\(chunkIndex)-s\\(index)-t\\(programType).bin"
+                            "\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(index)-t\(programType).bin"
                         )
                         try Data(payload).write(to: codeURL, options: .atomic)
                         savedRecords += 1
@@ -1123,14 +1123,14 @@ enum UnityShaderSourceScanner {
             }
         }
 
-        let types = typeCounts.keys.sorted().map { "\\($0):\\(typeCounts[$0] ?? 0)" }.joined(separator: ",")
-        let lengths = lengthCounts.keys.sorted().map { "\\($0):\\(lengthCounts[$0] ?? 0)" }
+        let types = typeCounts.keys.sorted().map { "\($0):\(typeCounts[$0] ?? 0)" }.joined(separator: ",")
+        let lengths = lengthCounts.keys.sorted().map { "\($0):\(lengthCounts[$0] ?? 0)" }
         let lengthSummary = lengths.prefix(20).joined(separator: ",")
         return [
-            "serialized_program_parse|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|count=\\(count)|valid_records=\\(validRecords)|code_records=\\(codeRecords)|failures=\\(failures)|entry_size=\\(entrySize)|status=\\(validRecords == count ? "all_records_parsed" : "partial")",
-            "serialized_program_types|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|counts=\\(types)|saved_code_records=\\(savedRecords)|saved_code_bytes=\\(savedBytes)|local_only=true",
-            "serialized_program_code_lengths|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|unique_lengths=\\(lengthCounts.count)|distribution=\\(lengthSummary)|truncated=\\(lengthCounts.count > 20)",
-            "serialized_program_profile_summary|object_index=\\(objectIndex)|platform=\\(platform)|chunk=\\(chunkIndex)|profiled_code_records=\\(codeRecords)|sampled_profiles=\\(samples.count)|local_only=true"
+            "serialized_program_parse|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|count=\(count)|valid_records=\(validRecords)|code_records=\(codeRecords)|failures=\(failures)|entry_size=\(entrySize)|status=\(validRecords == count ? "all_records_parsed" : "partial")",
+            "serialized_program_types|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|counts=\(types)|saved_code_records=\(savedRecords)|saved_code_bytes=\(savedBytes)|local_only=true",
+            "serialized_program_code_lengths|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|unique_lengths=\(lengthCounts.count)|distribution=\(lengthSummary)|truncated=\(lengthCounts.count > 20)",
+            "serialized_program_profile_summary|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|profiled_code_records=\(codeRecords)|sampled_profiles=\(samples.count)|local_only=true"
         ] + samples
     }
 
