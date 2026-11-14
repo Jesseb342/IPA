@@ -675,17 +675,17 @@ enum UnityShaderSourceScanner {
 
         let markerLines = markers.compactMap { marker -> String? in
             guard let offsets = markerOffsets[marker], !offsets.isEmpty else { return nil }
-            return "shader_object_marker|\\(marker)|offsets=\\(offsets.map(String.init).joined(separator: ","))"
+            return "shader_object_marker|\(marker)|offsets=\(offsets.map { String($0) }.joined(separator: ","))"
         }
         let stringLines = strings.prefix(80).map { item in
             let safe = item.value.replacingOccurrences(of: "|", with: "_")
                 .replacingOccurrences(of: "\\n", with: " ").replacingOccurrences(of: "\\r", with: " ")
-            return "shader_object_ascii|offset=\\(item.offset)|text=\\(safe.prefix(120))"
+            return "shader_object_ascii|offset=\(item.offset)|text=\(safe.prefix(120))"
         }
         return [
-            "shader_object_forensic|object_index=\\(objectIndex)|bytes=\\(bytes.count)|raw_file=\\(outputURL.lastPathComponent)",
-            "shader_object_prefix_hex|\\(preview)",
-            "shader_object_ascii_summary|total_strings_scanned=\\(totalStrings)|stored_first=\\(strings.count)|reported=\\(min(strings.count, 80))"
+            "shader_object_forensic|object_index=\(objectIndex)|bytes=\(bytes.count)|raw_file=\(outputURL.lastPathComponent)",
+            "shader_object_prefix_hex|\(preview)",
+            "shader_object_ascii_summary|total_strings_scanned=\(totalStrings)|stored_first=\(strings.count)|reported=\(min(strings.count, 80))"
         ] + markerLines + stringLines
     }
 
