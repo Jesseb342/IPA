@@ -93,7 +93,7 @@ enum UnityShaderSourceScanner {
             "atlas_beelevel": preparedDirectory.appendingPathComponent("unityfs-sample-atlas-beelevel-CAB.bin")
         ]
         var report: [String] = [
-            "unityfs_scanner_revision|prioritize-main-assets-v5-multi-object-shader-batch",
+            "unityfs_scanner_revision|prioritize-main-assets-v6-distributed-shader-forensics",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
             "scan|unity_shader_source_inventory",
             "image_bytes|\(imageSize)",
@@ -653,7 +653,12 @@ enum UnityShaderSourceScanner {
                        "SerializedShader", "m_ParsedForm", "keywords", "Keywords", "Pass",
                        "Vertex", "Fragment", "Compute", "Metal", "GLSL", "SPIR-V"]
         var markerOffsets: [String: [Int]] = [:]
+        var markerCounts: [String: Int] = [:]
         var strings: [(offset: Int, value: String)] = []
+        var distributedSamples: [(offset: Int, value: String)] = []
+        var tailStrings: [(offset: Int, value: String)] = []
+        let sampleInterval = max(bytes.count / 16, 1)
+        var nextSampleOffset = 0
         var totalStrings = 0
         var cursor = 0
 
@@ -672,8 +677,17 @@ enum UnityShaderSourceScanner {
                     if strings.count < 64 {
                         strings.append((start, value))
                     }
-                    for marker in markers where markerOffsets[marker, default: []].count < 8 {
-                        if value.localizedCaseInsensitiveContains(marker) {
+                    if distributedSamples.count < 16 && start >= nextSampleOffset {
+                        distributedSamples.append((start, value))
+                        nextSampleOffset = start + sampleInterval
+                    }
+                    tailStrings.append((start, value))
+                    if tailStrings.count > 16 {
+                        tailStrings.removeFirst()
+                    }
+                    for marker in markers where value.localizedCaseInsensitiveContains(marker) {
+                        markerCounts[marker, default: 0] += 1
+                        if markerOffsets[marker, default: []].count < 16 {
                             markerOffsets[marker, default: []].append(start)
                         }
                     }
@@ -684,8 +698,9 @@ enum UnityShaderSourceScanner {
         }
 
         let markerLines = markers.compactMap { marker -> String? in
-            guard let offsets = markerOffsets[marker], !offsets.isEmpty else { return nil }
-            return "shader_object_marker|\(marker)|offsets=\(offsets.map { String($0) }.joined(separator: ","))"
+            guard let hits = markerCounts[marker], hits > 0 else { return nil }
+            let offsets = markerOffsets[marker, default: []]
+            return "shader_object_marker|\(marker)|hits=\(hits)|sample_offsets=\(offsets.map { String($0) }.joined(separator: ","))"
         }
 
         // Unity shader objects can store compiled programs as opaque binary blobs.
@@ -713,16 +728,25 @@ enum UnityShaderSourceScanner {
         let zeroBytes = bytes.reduce(into: 0) { if $1 == 0 { $0 += 1 } }
         let printableBytes = bytes.reduce(into: 0) { if $1 >= 0x20 && $1 <= 0x7e { $0 += 1 } }
         let binarySummary = "shader_object_byte_profile|zero=\(zeroBytes)|printable_ascii=\(printableBytes)|non_ascii_or_control=\(bytes.count - zeroBytes - printableBytes)"
+        func safeString(_ value: String) -> String {
+            value.replacingOccurrences(of: "|", with: "_")
+                .replacingOccurrences(of: "\\n", with: " ")
+                .replacingOccurrences(of: "\\r", with: " ")
+        }
         let stringLines = strings.prefix(16).map { item in
-            let safe = item.value.replacingOccurrences(of: "|", with: "_")
-                .replacingOccurrences(of: "\\n", with: " ").replacingOccurrences(of: "\\r", with: " ")
-            return "shader_object_ascii|offset=\(item.offset)|text=\(safe.prefix(120))"
+            "shader_object_ascii|offset=\(item.offset)|text=\(safeString(item.value).prefix(120))"
+        }
+        let distributedLines = distributedSamples.map { item in
+            "shader_object_ascii_sample|offset=\(item.offset)|text=\(safeString(item.value).prefix(120))"
+        }
+        let tailLines = tailStrings.suffix(16).map { item in
+            "shader_object_ascii_tail|offset=\(item.offset)|text=\(safeString(item.value).prefix(120))"
         }
         return [
             "shader_object_forensic|object_index=\(objectIndex)|bytes=\(bytes.count)|raw_file=\(outputURL.lastPathComponent)",
             "shader_object_prefix_hex|\(preview)",
-            "shader_object_ascii_summary|total_strings_scanned=\(totalStrings)|stored_first=\(strings.count)|reported=\(min(strings.count, 16))"
-        ] + [binarySummary] + signatureLines + markerLines + stringLines
+            "shader_object_ascii_summary|total_strings_scanned=\(totalStrings)|stored_first=\(strings.count)|reported=\(min(strings.count, 16))|distributed_samples=\(distributedSamples.count)|tail_samples=\(tailStrings.count)"
+        ] + [binarySummary] + signatureLines + markerLines + stringLines + distributedLines + tailLines
     }
 
     private static func readBE32(_ bytes: [UInt8], _ position: Int) -> UInt32? {
