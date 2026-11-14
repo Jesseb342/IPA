@@ -285,7 +285,7 @@ jobs:
           grep -q 'enum OnDeviceMetalCompiler' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'enum UnityShaderSourceScanner' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'Inspect Unity Shader Objects' dm/ios/Sources/ImportScreen.swift
-          grep -q 'bigIDEnabled' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'format17Uses64BitPathID' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'inspectObjectIndex: Int?' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'inspectShaderObjectBytes' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'resources-assets-shader-object-142.bin' dm/ios/Sources/UnityShaderSourceScanner.swift
