@@ -105,3 +105,12 @@ Both publish logs contain 16 analyzer warnings: eight IL2026 trimming warnings a
 These runs prove that the translator can be compiled into an iOS ARM64 NativeAOT framework, its expected exports are present, and the framework can be embedded and signed as part of the generic shell. The workflow's checks are static build/package checks; neither run invokes the exported translator against a shader fixture or a Cuphead shader, and neither run demonstrates generated SPIR-V, resource metadata, MSL, or successful Metal compilation. The source-validation step explicitly says that game files are not accessed by Actions and that extraction/translation must execute in the app sandbox.
 
 The next meaningful translator milestone is a small deterministic on-device fixture test: call `nxn_shader_translator_probe`, then call `nxn_translate_shader_jobs` with a known valid shader job, and compare the resulting SPIR-V and resource metadata with the desktop Ryujinx translator. Only after that passes should a parsed Cuphead Shader object's program records be connected to the bridge.
+
+
+## NativeAOT JSON warning remediation attempt — 2026-11-14
+
+Commit [e6a1c687](https://github.com/Jesseb342/IPA/commit/e6a1c6876e6ce8e9c0161323cdd387d750f0049d) changes the four resource-array insertion sites in `SwshXlate.cs` to pass values as explicit `JsonNode` instances. This is intended to force overload resolution to `JsonArray.Add(JsonNode?)` rather than the generic `Add<T>` path that generated IL2026/IL3050 warnings in runs 94/95.
+
+**Status: source change committed, not yet build-verified.** The workflow is `workflow_dispatch` only, so this commit does not automatically start a build. The next run must inspect the NativeAOT publish log and confirm those warnings are gone (or identify any remaining call sites) before the remediation is considered complete. Do not claim the translator is AOT-clean until that run passes.
+
+After the clean publish, upgrade the current Swift button test from an initialization-only call to an actual translation fixture. The fixture must be a known-valid Maxwell shader binary and job metadata; success criteria are exit code 0, a nonempty `.spv`, a parseable `.res.json`, SPIR-V magic `0x07230203`, and a comparison against desktop Ryujinx output. An empty job list or the current probe function is not a shader translation test.
