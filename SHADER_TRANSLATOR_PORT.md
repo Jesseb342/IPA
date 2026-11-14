@@ -114,3 +114,11 @@ Commit [e6a1c687](https://github.com/Jesseb342/IPA/commit/e6a1c6876e6ce8e9c01613
 **Status: source change committed, not yet build-verified.** The workflow is `workflow_dispatch` only, so this commit does not automatically start a build. The next run must inspect the NativeAOT publish log and confirm those warnings are gone (or identify any remaining call sites) before the remediation is considered complete. Do not claim the translator is AOT-clean until that run passes.
 
 After the clean publish, upgrade the current Swift button test from an initialization-only call to an actual translation fixture. The fixture must be a known-valid Maxwell shader binary and job metadata; success criteria are exit code 0, a nonempty `.spv`, a parseable `.res.json`, SPIR-V magic `0x07230203`, and a comparison against desktop Ryujinx output. An empty job list or the current probe function is not a shader translation test.
+
+## B report check after latest repo update — 2026-11-14
+
+The repository's latest `Update B` commit is [70d3b8c6](https://github.com/Jesseb342/IPA/commit/70d3b8c616eb4c8cfc687d783b1b4bc71aa6364a). I compared the checked-in `B` file at this commit with the copy at the prior translator-log commit `f4c2067`: both resolve to the same blob SHA (`9b43722289a00e0eb64dc9a0d27fef3a46151196`). The latest commit therefore did not change the diagnostic report content.
+
+The current report remains 5,799 lines / 717,165 characters, with 65 extracted Shader objects totaling 5,786,672 bytes. Its tested raw signatures remain zero for SPIR-V, DXBC, MTLB, DXIL, and SHDR. It still contains no parsed `compressedBlob` records, platform/offset/length tables, decompressed ShaderProgram records, or stage-code extraction. The large `Data/resources.assets` object 142 remains a useful parser target, but the report itself has not advanced the extraction milestone.
+
+**Interpretation:** this latest B upload is a repository update, not a new scan result. Do not restart signature hunting or mark shader extraction complete. The next useful B report should come from the Unity 2017.4.9f1 serialized Shader parser and show validated bounded program records and stage payloads. Separately, the NativeAOT JSON remediation in `e6a1c687` still needs a manually dispatched build before it can be called verified.
