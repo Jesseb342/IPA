@@ -234,6 +234,14 @@ The current repository `B` file is a fresh v10 report (6,723 lines; 1,109,090 by
 - The sampled payloads have 26 distinct lengths, from 2,400 to 11,104 bytes. The most frequent sampled sizes are 2,912 bytes (260 samples), 3,168 bytes (86), 2,656 bytes (74), and 3,424 / 3,680 bytes (23 each).
 - All 534 sampled payloads report `signatures=none` for the scanner's SPIR-V, DXBC, DXIL, MTLB, SHDR, and NVN marker checks.
 
+
+### Target-object detail
+
+The large target, `Data/resources.assets` object 142, parsed all 5,184 records with zero failures. Its full length histogram contains 14 sizes: 2,912 (2,592 records), 3,168 (12), 3,424 (44), 3,680 (120), 3,936 (230), 4,192 (332), 4,448 (354), 4,704 (340), 4,960 (312), 5,216 (332), 5,472 (276), 5,728 (166), 5,984 (58), and 6,240 (16) bytes. The first 24 profiled samples are 2,912-byte records with the same leading structure and approximately 80.5% zero bytes.
+
+The smaller object 143 also parsed all 19 records with zero failures. Its nine observed code lengths range from 2,656 to 6,496 bytes. Its first three profiles show the same repeated header-like words, but varying length and zero/printable ratios. This cross-check suggests the pattern is not unique to object 142.
+
+
 ### What the payload profiles reveal
 
 The samples are not random-looking byte arrays. They repeatedly share a structured leading sequence. Common examples begin:
