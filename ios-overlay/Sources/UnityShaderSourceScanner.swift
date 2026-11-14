@@ -1134,7 +1134,7 @@ enum UnityShaderSourceScanner {
         ] + samples
     }
 
-        private static func le32FromData(_ data: Data, _ position: Int) -> UInt32? {
+    private static func le32FromData(_ data: Data, _ position: Int) -> UInt32? {
         guard position >= 0, position <= data.count - 4 else { return nil }
         return UInt32(data[position]) | (UInt32(data[position + 1]) << 8) |
             (UInt32(data[position + 2]) << 16) | (UInt32(data[position + 3]) << 24)
