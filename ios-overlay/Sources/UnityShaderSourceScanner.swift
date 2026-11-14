@@ -756,11 +756,182 @@ enum UnityShaderSourceScanner {
         let tailLines = tailStrings.suffix(16).map { item in
             "shader_object_ascii_tail|offset=\(item.offset)|text=\(safeString(item.value).prefix(120))"
         }
+        let programLines = inspectSerializedShaderProgramBlob(data, objectIndex: objectIndex, outputURL: outputURL)
         return [
             "shader_object_forensic|object_index=\(objectIndex)|bytes=\(bytes.count)|raw_file=\(outputURL.lastPathComponent)",
             "shader_object_prefix_hex|\(preview)",
             "shader_object_ascii_summary|total_strings_scanned=\(totalStrings)|stored_first=\(strings.count)|reported=\(min(strings.count, 16))|distributed_samples=\(distributedSamples.count)|tail_samples=\(tailStrings.count)"
-        ] + [binarySummary] + signatureLines + markerLines + stringLines + distributedLines + tailLines
+        ] + [binarySummary] + signatureLines + markerLines + stringLines + distributedLines + tailLines + programLines
+    }
+
+    /// Finds the Unity 5.5–2019 Shader tail arrays used by Unity 2017.4:
+    /// platforms[], offsets[], compressedLengths[], decompressedLengths[], compressedBlob[].
+    /// A candidate is accepted only when all counts agree, every range is in-bounds,
+    /// and at least one raw-LZ4 chunk decodes to a plausible SerializedProgram header.
+    private static func inspectSerializedShaderProgramBlob(_ data: Data, objectIndex: Int, outputURL: URL) -> [String] {
+        let bytes = [UInt8](data)
+        func le32(_ p: Int) -> UInt32? {
+            guard p >= 0, p <= bytes.count - 4 else { return nil }
+            return UInt32(bytes[p]) | (UInt32(bytes[p + 1]) << 8) |
+                (UInt32(bytes[p + 2]) << 16) | (UInt32(bytes[p + 3]) << 24)
+        }
+        func boundedCount(_ value: UInt32?, maximum: Int) -> Int? {
+            guard let value, value > 0, value <= UInt32(maximum) else { return nil }
+            return Int(value)
+        }
+
+        var accepted: [String] = []
+        let outputDirectory = outputURL.deletingLastPathComponent()
+            .appendingPathComponent("ShaderPrograms", isDirectory: true)
+        let maximumCandidateCount = 32
+        let maximumDecodedBytes = 32 * 1024 * 1024
+        var candidatesChecked = 0
+
+        guard bytes.count >= 24 else {
+            return ["shader_program_blob_layout|object_index=\(objectIndex)|status=object_too_small"]
+        }
+
+        for start in 0...(bytes.count - 4) {
+            guard let platformCount = boundedCount(le32(start), maximum: maximumCandidateCount) else { continue }
+            let platformsStart = start + 4
+            let platformsEnd = platformsStart + platformCount * 4
+            guard platformsEnd <= bytes.count else { continue }
+
+            var platforms: [Int32] = []
+            var validPlatforms = true
+            for i in 0..<platformCount {
+                guard let raw = le32(platformsStart + i * 4) else { validPlatforms = false; break }
+                let value = Int32(bitPattern: raw)
+                if value < -1 || value > 24 { validPlatforms = false; break }
+                platforms.append(value)
+            }
+            guard validPlatforms else { continue }
+
+            var cursor = platformsEnd
+            guard let offsetsCount = boundedCount(le32(cursor), maximum: maximumCandidateCount),
+                  offsetsCount == platformCount else { continue }
+            cursor += 4
+            var offsets: [UInt32] = []
+            for i in 0..<offsetsCount {
+                guard let value = le32(cursor + i * 4) else { offsets = []; break }
+                offsets.append(value)
+            }
+            guard offsets.count == platformCount else { continue }
+            cursor += offsetsCount * 4
+
+            guard let compressedCount = boundedCount(le32(cursor), maximum: maximumCandidateCount),
+                  compressedCount == platformCount else { continue }
+            cursor += 4
+            var compressedLengths: [UInt32] = []
+            for i in 0..<compressedCount {
+                guard let value = le32(cursor + i * 4) else { compressedLengths = []; break }
+                compressedLengths.append(value)
+            }
+            guard compressedLengths.count == platformCount else { continue }
+            cursor += compressedCount * 4
+
+            guard let decompressedCount = boundedCount(le32(cursor), maximum: maximumCandidateCount),
+                  decompressedCount == platformCount else { continue }
+            cursor += 4
+            var decompressedLengths: [UInt32] = []
+            for i in 0..<decompressedCount {
+                guard let value = le32(cursor + i * 4) else { decompressedLengths = []; break }
+                decompressedLengths.append(value)
+            }
+            guard decompressedLengths.count == platformCount else { continue }
+            cursor += decompressedCount * 4
+
+            guard let blobLengthRaw = le32(cursor) else { continue }
+            let blobLength = Int(blobLengthRaw)
+            cursor += 4
+            guard blobLength > 0, blobLength <= bytes.count - cursor else { continue }
+
+            var ranges: [(Int, Int)] = []
+            var rangeValid = true
+            for i in 0..<platformCount {
+                let offset = UInt64(offsets[i])
+                let compressed = UInt64(compressedLengths[i])
+                let decompressed = UInt64(decompressedLengths[i])
+                guard compressed > 0, compressed <= 16 * 1024 * 1024,
+                      decompressed >= 4, decompressed <= UInt64(maximumDecodedBytes),
+                      offset <= UInt64(blobLength), compressed <= UInt64(blobLength) - offset else {
+                    rangeValid = false
+                    break
+                }
+                ranges.append((Int(offset), Int(compressed)))
+            }
+            guard rangeValid else { continue }
+            candidatesChecked += 1
+
+            var decodedReports: [String] = []
+            var successfulChunks = 0
+            var decodedTotal = 0
+            for i in 0..<platformCount {
+                let compressedSize = Int(compressedLengths[i])
+                let decompressedSize = Int(decompressedLengths[i])
+                guard decodedTotal <= maximumDecodedBytes - decompressedSize else {
+                    decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|status=decode_budget_exceeded")
+                    continue
+                }
+                let sourceStart = cursor + Int(offsets[i])
+                let sourceEnd = sourceStart + compressedSize
+                guard sourceStart >= cursor, sourceEnd >= sourceStart, sourceEnd <= cursor + blobLength else {
+                    decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|status=range_rejected")
+                    continue
+                }
+                let packed = Data(bytes[sourceStart..<sourceEnd])
+                var decoded = Data(count: decompressedSize)
+                let decodedSize = decoded.withUnsafeMutableBytes { destination in
+                    packed.withUnsafeBytes { source in
+                        guard let dst = destination.bindMemory(to: UInt8.self).baseAddress,
+                              let src = source.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+                        return compression_decode_buffer(dst, decompressedSize, src, compressedSize,
+                                                          nil, COMPRESSION_LZ4_RAW)
+                    }
+                }
+                guard decodedSize == decompressedSize,
+                      let subProgramCountRaw = le32FromData(decoded, 0) else {
+                    decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|compressed=\(compressedSize)|decompressed_expected=\(decompressedSize)|status=lz4_or_header_failed|decoded=\(decodedSize)")
+                    continue
+                }
+                let subProgramCount = Int(Int32(bitPattern: subProgramCountRaw))
+                guard subProgramCount >= 0, subProgramCount <= 100_000 else {
+                    decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|status=implausible_subprogram_count_\(subProgramCount)")
+                    continue
+                }
+
+                do {
+                    try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+                    let safeBase = outputURL.deletingPathExtension().lastPathComponent
+                    let destination = outputDirectory.appendingPathComponent(
+                        "\(safeBase)-platform-\(platforms[i])-chunk-\(i).bin"
+                    )
+                    try decoded.write(to: destination, options: .atomic)
+                    successfulChunks += 1
+                    decodedTotal += decompressedSize
+                    decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|offset=\(offsets[i])|compressed=\(compressedSize)|decompressed=\(decompressedSize)|subprograms=\(subProgramCount)|status=decoded|file=\(destination.lastPathComponent)")
+                } catch {
+                    decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|status=write_failed")
+                }
+            }
+
+            if successfulChunks > 0 {
+                accepted.append("shader_program_blob_layout|object_index=\(objectIndex)|status=validated_candidate|candidate_offset=\(start)|platforms=\(platforms.map(String.init).joined(separator: ","))|platform_count=\(platformCount)|blob_bytes=\(blobLength)|decoded_chunks=\(successfulChunks)|candidate_checks=\(candidatesChecked)|local_only=true")
+                accepted.append(contentsOf: decodedReports)
+                return accepted
+            }
+        }
+
+        if candidatesChecked == 0 {
+            return ["shader_program_blob_layout|object_index=\(objectIndex)|status=no_bounded_layout_candidate|bytes_scanned=\(bytes.count)"]
+        }
+        return ["shader_program_blob_layout|object_index=\(objectIndex)|status=candidates_found_but_no_valid_lz4_program|candidates_checked=\(candidatesChecked)"] + accepted
+    }
+
+    private static func le32FromData(_ data: Data, _ position: Int) -> UInt32? {
+        guard position >= 0, position <= data.count - 4 else { return nil }
+        return UInt32(data[position]) | (UInt32(data[position + 1]) << 8) |
+            (UInt32(data[position + 2]) << 16) | (UInt32(data[position + 3]) << 24)
     }
 
     private static func readBE32(_ bytes: [UInt8], _ position: Int) -> UInt32? {
