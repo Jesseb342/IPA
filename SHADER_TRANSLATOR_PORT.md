@@ -161,3 +161,21 @@ The large `Data/resources.assets` Shader object 142 was reached: its candidate l
 ### Next milestone
 
 Obtain and inspect the locally written decoded chunk for object 142 (and object 143 as a smaller comparison). Implement a bounded parser for the actual Unity 2017.4 SerializedProgram structure, validate record boundaries and subprogram metadata, and identify the program type/stage and code byte ranges. Only then create a translator job from a real extracted stage and test the existing on-device translator bridge. Keep all game data, raw Shader objects, and decoded program chunks on the iPhone; do not upload them to GitHub.
+
+## Unity 2017.4 SerializedProgram record parser — 2026-11-14
+
+The v9 scanner adds a second parsing layer after raw-LZ4 chunk extraction. It follows the UnityPy/AssetStudio layout for Unity 2017.4:
+
+- Read the subprogram count at the start of the decoded SerializedProgram.
+- Read the 8-byte offset-table entries used before Unity 2019.3; each record begins at the entry's 32-bit offset.
+- Parse each record's version and GPU-program type, the 12-byte platform metadata, the version-gated 4-byte field, aligned keyword strings, and length-prefixed program-code bytes.
+- Validate all offsets, counts, string lengths, code lengths, and buffer ranges before reading.
+- Report record counts by numeric GPU-program type and sample record metadata. Save at most 64 nonempty code payloads per object/chunk, capped at 8 MiB, under the local `ShaderPrograms/ProgramCode` directory.
+
+The scanner revision is now `unity2017-serialized-program-record-parser-v9`, and the manual build workflow's source validation was updated to require that exact revision.
+
+**Status: source committed, not yet built or tested on the iPhone.** The 8-byte table and record field sequence are based on UnityPy's version-aware parser (Unity 2017.3/2017.4 uses the 201708220 program record version; the 12-byte table entries begin at Unity 2019.3). This implementation is an initial bounded parser, not yet independently validated against Cuphead's decoded chunks. In particular, the meaning of numeric GPU-program types, the alignment behavior, and whether every table offset is relative to the beginning of the decoded chunk must be confirmed by the next B report. A complete parse requires the expected record count with zero failures and plausible code payload lengths; partial records must not be treated as success.
+
+### Next test
+
+Manually dispatch the shell build, install the resulting IPA, and run the shader scan again. In B, look for `serialized_program_parse` lines for objects 142 and 143. If object 142 reports all 5,184 records parsed, inspect its type counts and sample code prefixes; if offsets or record boundaries fail, use the first failing subprogram index and offset to correct the parser before attempting translation. No raw game files or extracted code payloads should be uploaded to GitHub.
