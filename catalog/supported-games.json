@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-13T19:50:14Z",
+  "generatedAt": "2026-11-14T06:39:03Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "882f326858861fa951f055e2a776060caa11dccc",
+    "commit": "764c658c710b6dc0add9ebe02d5b52d113602e1d",
     "profilesPath": "dm/games"
   },
-  "count": 164,
+  "count": 170,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -1392,6 +1392,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007960049A0000/README.md"
     },
     {
+      "titleId": "01007A2027548000",
+      "name": "Trails in the Sky 2nd Chapter",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007A2027548000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007A2027548000/README.md"
+    },
+    {
       "titleId": "01007A3009184000",
       "name": "Princess Peach: Showtime!",
       "profileStatus": "profile_available",
@@ -2242,6 +2259,40 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100C49025D3E000/README.md"
     },
     {
+      "titleId": "0100C510166F0000",
+      "name": "Chained Echoes",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100C510166F0000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100C510166F0000/README.md"
+    },
+    {
+      "titleId": "0100C9C00E25C000",
+      "name": "Mario Golf: Super Rush",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100C9C00E25C000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100C9C00E25C000/README.md"
+    },
+    {
       "titleId": "0100CA9002322000",
       "name": "SteamWorld Dig 2",
       "profileStatus": "profile_available",
@@ -2599,6 +2650,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0400245021D2C000/README.md"
     },
     {
+      "titleId": "040032B023CA4000",
+      "name": "Orbitals",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/040032B023CA4000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/040032B023CA4000/README.md"
+    },
+    {
       "titleId": "0400380020056000",
       "name": "Splatoon Raiders",
       "profileStatus": "profile_available",
@@ -2648,6 +2716,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0400486024DEC000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0400486024DEC000/README.md"
+    },
+    {
+      "titleId": "0400569027BF4000",
+      "name": "Resident Evil 4",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0400569027BF4000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0400569027BF4000/README.md"
     },
     {
       "titleId": "040074A01BF12000",
@@ -2716,6 +2801,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/04008E001F098000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/04008E001F098000/README.md"
+    },
+    {
+      "titleId": "0400921025B32000",
+      "name": "Sonic Frontiers Definitive Edition",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0400921025B32000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0400921025B32000/README.md"
     },
     {
       "titleId": "0400A3A01EE4C000",
