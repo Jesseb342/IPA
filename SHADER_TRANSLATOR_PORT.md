@@ -83,3 +83,25 @@ Across all 65 extracted Shader objects, the current marker inventory reports 75 
 The latest `B` artifact was fetched again and remains revision `prioritize-all-serialized-shader-objects-v7` (5,799 lines; 717,165 characters). Its top-level inventory is unchanged: 543 indexed files, 256 serialized candidates, 287 bundle candidates, 286 UnityFS bundles, and 82 directly inspected SerializedFiles totaling 249,390,016 bytes. The report still identifies the same 65 extracted Shader objects and the same `Data/resources.assets` object 142 (5,064,092 bytes) / object 143 (46,656 bytes) candidates. No new shader-program extraction, compressed-blob layout, or decompression evidence appears in this report revision.
 
 This recheck is recorded to establish that the current B artifact has not advanced beyond the v7 raw-object inventory. Do not repeat the byte-signature scan as the next milestone. The next useful report should come from implementing and exercising the Unity 2017.4.9f1 Shader serialized-layout parser on object 142, then cross-checking its bounded program records against object 143. A valid milestone requires parsed platform/offset/compressed-size/decompressed-size fields, successful bounded decompression, and identifiable program/stage records—not just printable strings or an LZ4 success flag.
+
+
+## Shader translator build verification — workflow runs 94 and 95 (2026-11-14)
+
+The two supplied Actions runs were inspected from their job logs and uploaded artifacts:
+
+- Run 94: [43605868160](https://github.com/Jesseb342/IPA/actions/runs/43605868160), source revision `1a11645e6af8e160ce511f2760fb5e6d571d48c9`.
+- Run 95: [43609906545](https://github.com/Jesseb342/IPA/actions/runs/43609906545), source revision `d5f90c4581007f9e99da0882d06f76871acdc7f3`.
+
+Both jobs completed successfully. The .NET 10 iOS NativeAOT publish produced an ARM64 `NxNativeShaderTranslator` binary (3,727,832 bytes) and packaged it as `NxNativeShaderTranslator.framework`. The workflow checked for both exported C ABI symbols (`nxn_translate_shader_jobs` and `nxn_shader_translator_probe`), verified that the framework was embedded in the app, and passed app code-signature verification. Each run also produced a roughly 24.2 MiB shell IPA artifact and uploaded the translator build diagnostics.
+
+The two runs are not two independent code milestones: comparing their source revisions shows only `SHADER_TRANSLATOR_PORT.md` changed between them; the app/translator source was unchanged. Their translator publish logs show the same build result, with only restore timings differing.
+
+### AOT warning to resolve
+
+Both publish logs contain 16 analyzer warnings: eight IL2026 trimming warnings and eight IL3050 dynamic-code/AOT warnings. They point to generic `System.Text.Json.Nodes.JsonArray.Add<T>` calls in `SwshXlate.cs` around lines 237–241. NativeAOT publish still succeeded, but these warnings identify a real risk that JSON job construction/serialization could rely on members or runtime code removed by trimming. Before treating the translator as production-ready, replace those paths with an AOT-safe serialization approach (for example, explicit primitive JSON nodes or source-generated serialization metadata), then verify the serialized job payload on-device.
+
+### What runs 94/95 prove—and what they do not
+
+These runs prove that the translator can be compiled into an iOS ARM64 NativeAOT framework, its expected exports are present, and the framework can be embedded and signed as part of the generic shell. The workflow's checks are static build/package checks; neither run invokes the exported translator against a shader fixture or a Cuphead shader, and neither run demonstrates generated SPIR-V, resource metadata, MSL, or successful Metal compilation. The source-validation step explicitly says that game files are not accessed by Actions and that extraction/translation must execute in the app sandbox.
+
+The next meaningful translator milestone is a small deterministic on-device fixture test: call `nxn_shader_translator_probe`, then call `nxn_translate_shader_jobs` with a known valid shader job, and compare the resulting SPIR-V and resource metadata with the desktop Ryujinx translator. Only after that passes should a parsed Cuphead Shader object's program records be connected to the bridge.
