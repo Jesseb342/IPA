@@ -179,3 +179,21 @@ The scanner revision is now `unity2017-serialized-program-record-parser-v9`, and
 ### Next test
 
 Manually dispatch the shell build, install the resulting IPA, and run the shader scan again. In B, look for `serialized_program_parse` lines for objects 142 and 143. If object 142 reports all 5,184 records parsed, inspect its type counts and sample code prefixes; if offsets or record boundaries fail, use the first failing subprogram index and offset to correct the parser before attempting translation. No raw game files or extracted code payloads should be uploaded to GitHub.
+
+## B report: v9 SerializedProgram parsing result — 2026-11-14
+
+The next on-device B report confirms the v9 parser ran in the installed build:
+
+- Scanner revision: `unity2017-serialized-program-record-parser-v9`.
+- Inventory remains 543 files, 82 direct serialized-file scans, and 249,390,016 directly scanned bytes.
+- 65 shader chunks were decompressed and all 65 SerializedProgram tables were parsed.
+- Across those chunks, 5,698/5,698 subprogram records were structurally parsed; zero record failures.
+- Key target `Data/resources.assets`, Shader object 142: 5,184/5,184 records parsed; object 143: 19/19 parsed.
+- Every reported record so far has numeric GPU program type 26. UnityPy's `ShaderGpuProgramType` enum identifies 26 as `kShaderGpuProgramConsoleVS` (console vertex shader), not Metal or SPIR-V. The 2017.4 record version is 201708220.
+- Object 142's first 24 sampled code payloads are each 2,912 bytes and begin `0000000000000000`. The scanner saved 64 code payloads (186,368 bytes) locally for object 142; object 143 saved 19 (92,448 bytes). All saved data remains on-device.
+
+### Interpretation and next validation
+
+This is a major parser milestone: the offsets, record headers, keyword lists, and code-length fields are internally consistent across all 5,698 records, including the 5,184 variants in object 142. However, **it does not yet establish that the extracted code payloads are valid executable shader programs**. The fact that all observed records are ConsoleVS and that sampled payloads begin with eight zero bytes needs investigation. In particular, do not feed these directly to the existing SPIR-V/NxNative translator: ConsoleVS is a different program type and the payload format has not been identified.
+
+Next scanner revision should profile the full code payload locally (byte histogram/zero and printable ratios, first printable strings, common binary signatures, and a bounded hex preview beyond the leading zero bytes), report payload length distributions, and preserve representative payloads from multiple program variants. Then identify the exact console platform represented by platform ID 19 and the Unity ConsoleVS payload format. Only after establishing a supported source format should we build a converter or translator path. No game data or shader payloads are to be uploaded to GitHub.
