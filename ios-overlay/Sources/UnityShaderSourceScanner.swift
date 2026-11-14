@@ -786,6 +786,7 @@ enum UnityShaderSourceScanner {
         let maximumCandidateCount = 32
         let maximumDecodedBytes = 32 * 1024 * 1024
         var candidatesChecked = 0
+        let maximumCandidatesToDecode = 32
 
         guard bytes.count >= 24 else {
             return ["shader_program_blob_layout|object_index=\(objectIndex)|status=object_too_small"]
@@ -860,6 +861,7 @@ enum UnityShaderSourceScanner {
             }
             guard rangeValid else { continue }
             candidatesChecked += 1
+            guard candidatesChecked <= maximumCandidatesToDecode else { break }
 
             var decodedReports: [String] = []
             var successfulChunks = 0
@@ -893,7 +895,7 @@ enum UnityShaderSourceScanner {
                     continue
                 }
                 let subProgramCount = Int(Int32(bitPattern: subProgramCountRaw))
-                guard subProgramCount >= 0, subProgramCount <= 100_000 else {
+                guard subProgramCount > 0, subProgramCount <= 100_000 else {
                     decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|status=implausible_subprogram_count_\(subProgramCount)")
                     continue
                 }
