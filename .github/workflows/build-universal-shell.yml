@@ -278,7 +278,7 @@ jobs:
           echo "UnityFS scanner copied SHA256:"
           shasum -a 256 dm/ios/Sources/UnityShaderSourceScanner.swift
           cmp ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift dm/ios/Sources/UnityShaderSourceScanner.swift
-          grep -q 'unityfs_scanner_revision|prioritize-main-assets-v4-object142-forensics' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'unityfs_scanner_revision|prioritize-main-assets-v5-multi-object-shader-batch' dm/ios/Sources/UnityShaderSourceScanner.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
@@ -286,9 +286,9 @@ jobs:
           grep -q 'enum UnityShaderSourceScanner' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'Inspect Unity Shader Objects' dm/ios/Sources/ImportScreen.swift
           grep -q 'format17Uses64BitPathID' dm/ios/Sources/UnityShaderSourceScanner.swift
-          grep -q 'inspectObjectIndex: Int?' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'inspectObjectIndices: Set<Int>?' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'inspectShaderObjectBytes' dm/ios/Sources/UnityShaderSourceScanner.swift
-          grep -q 'resources-assets-shader-object-142.bin' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'resources-assets-shader-object-\\(objectIndex).bin' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'shader_object_marker' dm/ios/Sources/UnityShaderSourceScanner.swift
           swiftc -frontend -parse dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'enum ShaderTranslatorBridge' dm/ios/Sources/ImportScreen.swift
@@ -329,9 +329,9 @@ jobs:
               raise SystemExit("Shader scanner contract missing: " + ", ".join(missing))
 
           plan = """Cuphead shader investigation — immediate next steps
-          1. Inspect Data/resources.assets Shader object index 142 (previously reported as 5,064,092 bytes).
-          2. On the iPhone, save its exact bounded raw bytes to Documents/PreparedGame/ShaderSources/resources-assets-shader-object-142.bin.
-          3. Inventory its prefix and embedded printable strings/metadata markers to learn whether it contains shader variants and where program records may begin.
+          1. Inspect all 25 Shader objects (indices 129–153) in Data/resources.assets.
+          2. On the iPhone, save each bounded raw object to Documents/PreparedGame/ShaderSources/resources-assets-shader-object-<index>.bin, subject to the 32 MB aggregate cap.
+          3. Compare each object's prefix, printable strings, metadata markers, binary signatures, and byte profile to identify the best candidate for Unity Shader schema decoding.
           4. Use the resulting report and raw object layout to identify Unity metadata boundaries versus actual shader program payloads; do not treat string hits as proof of executable code.
           5. Parse the confirmed serialized program records, extract Switch shader machine code and metadata, and build translator job JSON.
           6. Run the embedded Ryujinx translator on-device, then compile generated Metal source with Apple's Metal compiler.
@@ -340,7 +340,7 @@ jobs:
           Current boundary: this workflow only validates source-code prerequisites. It does not access, upload, or convert any user game files or keys. Object inspection, extraction, and translation execute inside the iOS app sandbox.
           """
           Path(sys.argv[2]).write_text(plan)
-          print("Verified all current Unity shader candidate-offset safeguards.")
+          print("Verified the multi-object Unity Shader extraction safeguards and local-only output contract.")
           print(plan)
           PY
 
