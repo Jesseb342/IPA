@@ -290,3 +290,34 @@ The manual build workflow's source gate now requires the v11 revision.
 **What this can establish:** whether payloads later in the 5,184-record object 142 chunk differ from the previously sampled prefix, and how many distinct byte payloads exist by fingerprint. The FNV-1a value is a compact diagnostic fingerprint, not a cryptographic identity guarantee; collisions are theoretically possible. It does not identify the console bytecode format or translate shaders.
 
 **Verification status:** source and workflow gate are committed, but no v11 IPA build or on-device scan has been run yet. The workflow remains manual. After a successful manual dispatch, install that IPA and run one fresh scan; the resulting B should contain revision v11 plus a new scan UUID. Compare its distributed profiles and unique/duplicate counts before deciding on a format-specific decoder.
+
+
+
+## B report: v11 distributed profiling — 2026-11-14
+
+Fetched the current repository `B` directly after the v11 scanner commit. The file is 1,159,500 bytes and 6,769 lines. It is a new report, not a repeat of the v10 report.
+
+### Scan identity and parser results
+
+- Scanner revision: `unity2017-shader-payload-profile-v11-distributed`.
+- Scan ID: `045009B5-FE1B-491C-8D45-10E3290D7C6A`.
+- Scan started: `2026-11-14T19:54:22Z`.
+- Inventory: 543 files, 286 UnityFS bundles, 82 direct SerializedFile scans covering 249,390,016 bytes.
+- Target object 142 in `Data/resources.assets`: 5,184/5,184 records parsed, zero failures; 5,184 non-empty code payloads; GPU program type 26.
+- Object 142 now has 64 distributed profiles, spanning record indices 40 through 5,143, rather than the previous prefix-only sample.
+- The full payload length histogram remains 14 sizes: 2,912 (2,592), 3,168 (12), 3,424 (44), 3,680 (120), 3,936 (230), 4,192 (332), 4,448 (354), 4,704 (340), 4,960 (312), 5,216 (332), 5,472 (276), 5,728 (166), 5,984 (58), and 6,240 (16).
+
+### What v11 adds to our understanding
+
+- The scanner calculated fingerprints for all 5,184 non-empty payloads in object 142.
+- It reports 2,592 unique FNV-1a 64-bit fingerprints and 2,592 duplicate payload records. This indicates substantial exact repetition in the code bytes, with many records reusing identical payloads despite different keyword metadata.
+- The distributed samples span multiple payload lengths and header count fields. The sample at record index 5,143 is 5,728 bytes; its leading structure includes the same repeated fields seen in smaller records, while the field at offset 12 changes with the payload size/profile.
+- The six literal signature checks (SPIR-V, DXBC, DXIL, MTLB, SHDR, NVN) remain negative in the sampled profiles.
+
+### Interpretation and next technical step
+
+This is meaningful new evidence: the earlier conclusion based on the first 24 records was incomplete. The payload family is not limited to one 2,912-byte shape. It includes multiple sizes, and v11's all-record fingerprint pass shows that half of the records in object 142 are duplicate byte payloads under the scanner's 64-bit fingerprint. Since FNV-1a is not cryptographic, this is strong diagnostic evidence of repetition rather than a formal collision-proof identity claim.
+
+The next useful investigation is to map the repeated header fields and compare representative saved payloads from several length classes. In particular, determine whether the size/count fields describe an internal instruction stream or a nested container, and identify the actual platform-19 / GPU-program-type-26 encoding before attempting translation. The current report still does not establish the bytecode format or contain evidence of a translator invocation or successful translation. Do not feed these payloads to the SPIR-V translator based on these findings alone.
+
+**Verification status:** this B proves that a v11 scanner executed on-device and completed the full 5,184-record parse and fingerprint pass. It does not prove shader translation or game rendering.
