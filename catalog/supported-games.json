@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-14T06:39:03Z",
+  "generatedAt": "2026-11-14T18:14:28Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "764c658c710b6dc0add9ebe02d5b52d113602e1d",
+    "commit": "f6ae51d9d39f1390fa9f3c0f5b599ce8f1feffbe",
     "profilesPath": "dm/games"
   },
-  "count": 170,
+  "count": 171,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -2699,6 +2699,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/04003F40232DE000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/04003F40232DE000/README.md"
+    },
+    {
+      "titleId": "040041E0212AE000",
+      "name": "Fast Fusion",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/040041E0212AE000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/040041E0212AE000/README.md"
     },
     {
       "titleId": "0400486024DEC000",
