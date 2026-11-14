@@ -149,3 +149,15 @@ After building and installing the updated IPA, run the existing shader-source sc
 If the report says `no_bounded_layout_candidate`, the serialized tail layout or array alignment assumption needs correction. If it finds candidates but no valid LZ4/program header, inspect the candidate offsets and decompression result before changing the format assumptions. Object 143 remains the smaller cross-check.
 
 **Verification status:** source committed; not yet built or run on-device. The Actions workflow is manually dispatched, and a fresh B report requires the user to install the new IPA and rerun the scan. Do not describe the scanner as having extracted Cuphead shader programs until a new B report confirms decoded chunks.
+
+## B report: v8 blob-table extraction result — 2026-11-14
+
+The latest checked-in `B` report now identifies scanner revision `unity2017-shader-blob-table-probe-v8` (5,929 lines). The on-device probe reports 65 validated compressed-blob layouts and 65 successful raw-LZ4 chunk decodes. The decoded chunks total 25,056,584 bytes and report 5,698 subprograms in aggregate. Every accepted record in this run is platform value 19.
+
+The large `Data/resources.assets` Shader object 142 was reached: its candidate layout begins at object offset 1,333,016, declares a 3,731,029-byte blob, and decodes to 23,182,308 bytes with a leading count of 5,184 subprograms. The smaller object 143 also produced a decoded chunk (25,654 compressed bytes to 113,340 bytes; 19 subprograms). These results establish that the v8 probe is finding bounded LZ4-compressed data and writing decoded chunk files locally.
+
+**Important limits:** the B report does not contain the decoded chunk bytes themselves. The leading integer is still only being used as a plausibility check; the full SerializedProgram records have not yet been parsed or independently validated. The five generic binary-signature scans (SPIR-V, DXBC, MTLB, DXIL, SHDR) still report zero hits in the raw Shader-object payloads; that does not invalidate the decompression result because the code may be wrapped in Unity's serialized program records. No vertex/fragment stage mapping, shader-code extraction, translator invocation, SPIR-V output, or Metal compilation is demonstrated yet.
+
+### Next milestone
+
+Obtain and inspect the locally written decoded chunk for object 142 (and object 143 as a smaller comparison). Implement a bounded parser for the actual Unity 2017.4 SerializedProgram structure, validate record boundaries and subprogram metadata, and identify the program type/stage and code byte ranges. Only then create a translator job from a real extracted stage and test the existing on-device translator bridge. Keep all game data, raw Shader objects, and decoded program chunks on the iPhone; do not upload them to GitHub.
