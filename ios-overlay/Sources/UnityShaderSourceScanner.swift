@@ -846,7 +846,6 @@ enum UnityShaderSourceScanner {
             cursor += 4
             guard blobLength > 0, blobLength <= bytes.count - cursor else { continue }
 
-            var ranges: [(Int, Int)] = []
             var rangeValid = true
             for i in 0..<platformCount {
                 let offset = UInt64(offsets[i])
@@ -858,7 +857,6 @@ enum UnityShaderSourceScanner {
                     rangeValid = false
                     break
                 }
-                ranges.append((Int(offset), Int(compressed)))
             }
             guard rangeValid else { continue }
             candidatesChecked += 1
@@ -916,7 +914,7 @@ enum UnityShaderSourceScanner {
             }
 
             if successfulChunks > 0 {
-                accepted.append("shader_program_blob_layout|object_index=\(objectIndex)|status=validated_candidate|candidate_offset=\(start)|platforms=\(platforms.map(String.init).joined(separator: ","))|platform_count=\(platformCount)|blob_bytes=\(blobLength)|decoded_chunks=\(successfulChunks)|candidate_checks=\(candidatesChecked)|local_only=true")
+                accepted.append("shader_program_blob_layout|object_index=\(objectIndex)|status=validated_candidate|candidate_offset=\(start)|platforms=\(platforms.map { String($0) }.joined(separator: ","))|platform_count=\(platformCount)|blob_bytes=\(blobLength)|decoded_chunks=\(successfulChunks)|candidate_checks=\(candidatesChecked)|local_only=true")
                 accepted.append(contentsOf: decodedReports)
                 return accepted
             }
