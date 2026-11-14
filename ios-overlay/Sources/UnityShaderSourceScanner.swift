@@ -677,6 +677,32 @@ enum UnityShaderSourceScanner {
             guard let offsets = markerOffsets[marker], !offsets.isEmpty else { return nil }
             return "shader_object_marker|\(marker)|offsets=\(offsets.map { String($0) }.joined(separator: ","))"
         }
+
+        // Unity shader objects can store compiled programs as opaque binary blobs.
+        // Search for common container signatures independently of printable strings.
+        let signatures: [(name: String, bytes: [UInt8])] = [
+            ("SPIRV", [0x03, 0x02, 0x23, 0x07]),
+            ("DXBC", [0x44, 0x58, 0x42, 0x43]),
+            ("MTLB", [0x4d, 0x54, 0x4c, 0x42]),
+            ("DXIL", [0x44, 0x58, 0x49, 0x4c]),
+            ("SHDR", [0x53, 0x48, 0x44, 0x52])
+        ]
+        var signatureLines: [String] = []
+        for signature in signatures {
+            var offsets: [Int] = []
+            if bytes.count >= signature.bytes.count {
+                for position in 0...(bytes.count - signature.bytes.count) {
+                    if Array(bytes[position..<(position + signature.bytes.count)]) == signature.bytes {
+                        if offsets.count < 16 { offsets.append(position) }
+                    }
+                }
+            }
+            signatureLines.append("shader_object_binary_signature|\(signature.name)|hits=\(offsets.count)|offsets=\(offsets.map { String($0) }.joined(separator: ","))")
+        }
+
+        let zeroBytes = bytes.reduce(into: 0) { if $1 == 0 { $0 += 1 } }
+        let printableBytes = bytes.reduce(into: 0) { if $1 >= 0x20 && $1 <= 0x7e { $0 += 1 } }
+        let binarySummary = "shader_object_byte_profile|zero=\(zeroBytes)|printable_ascii=\(printableBytes)|non_ascii_or_control=\(bytes.count - zeroBytes - printableBytes)"
         let stringLines = strings.prefix(80).map { item in
             let safe = item.value.replacingOccurrences(of: "|", with: "_")
                 .replacingOccurrences(of: "\\n", with: " ").replacingOccurrences(of: "\\r", with: " ")
@@ -686,7 +712,7 @@ enum UnityShaderSourceScanner {
             "shader_object_forensic|object_index=\(objectIndex)|bytes=\(bytes.count)|raw_file=\(outputURL.lastPathComponent)",
             "shader_object_prefix_hex|\(preview)",
             "shader_object_ascii_summary|total_strings_scanned=\(totalStrings)|stored_first=\(strings.count)|reported=\(min(strings.count, 80))"
-        ] + markerLines + stringLines
+        ] + [binarySummary] + signatureLines + markerLines + stringLines
     }
 
     private static func readBE32(_ bytes: [UInt8], _ position: Int) -> UInt32? {
