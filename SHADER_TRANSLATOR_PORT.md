@@ -201,3 +201,21 @@ Next scanner revision should profile the full code payload locally (byte histogr
 ## B report recheck — 2026-11-14
 
 A subsequent request to re-read the repository's current `B` file returned the same v9 report as the preceding analysis: 6,593 lines, 65 decoded chunks, 65 structurally parsed SerializedProgram tables, 5,698/5,698 records parsed with zero failures. Object 142 remains 5,184/5,184, object 143 remains 19/19, and the sampled object-142 payloads remain 2,912 bytes with an eight-zero-byte prefix. No new scanner revision, payload profile, or translation result is present. This is a duplicate/recheck of the existing evidence, not a new test result; no scanner source change is justified by an unchanged B report.
+
+## v10 payload profiling and record-boundary hardening — 2026-11-14
+
+The next scanner revision is `unity2017-shader-payload-profile-v10`.
+
+Changes committed:
+
+- Each SerializedProgram record is now bounded by the next physical record offset. Code lengths, keyword strings, and metadata must fit inside that record's own range, rather than merely fitting somewhere before the end of the entire decompressed chunk. Duplicate record offsets are rejected.
+- The scanner profiles extracted code payloads locally and reports zero-byte percentage, printable-byte percentage, first nonzero offset, a leading hex preview, a hex window beginning at the first nonzero byte, a bounded ASCII preview, and hits for common SPIR-V/DXBC/DXIL/Metal/SHDR/NVN markers.
+- It reports code-payload length distributions per object/chunk. The existing local-only save cap remains 64 payloads / 8 MiB per chunk.
+
+The workflow source-validation check now requires the v10 scanner revision.
+
+### What this test should tell us
+
+For object 142, the new B report should distinguish between an all-zero/mostly-zero payload and a structured binary whose meaningful bytes begin after a zero-filled header. The length distribution will show whether the 2,912-byte sample size is representative or whether there are multiple code layouts. Signature hits are exploratory only; no signature match does not mean the payload is invalid.
+
+**Verification status:** source and workflow validation are committed, but this revision has not yet been built or run on-device. The build remains a manual `workflow_dispatch`; after dispatch, install the resulting IPA and rerun the shader scan to generate a new B report. Do not interpret the v10 source commit as a successful build or as evidence that a shader has translated.
