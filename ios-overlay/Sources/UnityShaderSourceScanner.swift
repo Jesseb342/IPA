@@ -910,6 +910,14 @@ enum UnityShaderSourceScanner {
                     successfulChunks += 1
                     decodedTotal += decompressedSize
                     decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|offset=\(offsets[i])|compressed=\(compressedSize)|decompressed=\(decompressedSize)|subprograms=\(subProgramCount)|status=decoded|file=\(destination.lastPathComponent)")
+                    decodedReports.append(contentsOf: inspectSerializedProgramRecords(
+                        decoded,
+                        objectIndex: objectIndex,
+                        platform: platforms[i],
+                        chunkIndex: i,
+                        outputDirectory: outputDirectory,
+                        outputBaseName: safeBase
+                    ))
                 } catch {
                     decodedReports.append("shader_program_chunk|platform=\(platforms[i])|index=\(i)|status=write_failed")
                 }
@@ -926,6 +934,149 @@ enum UnityShaderSourceScanner {
             return ["shader_program_blob_layout|object_index=\(objectIndex)|status=no_bounded_layout_candidate|bytes_scanned=\(bytes.count)"]
         }
         return ["shader_program_blob_layout|object_index=\(objectIndex)|status=candidates_found_but_no_valid_lz4_program|candidates_checked=\(candidatesChecked)"] + accepted
+    }
+
+    /// Parses Unity 2017.4 SerializedProgram's offset table and LoadGpuProgramFromData records.
+    /// The 2017.4 table uses 8-byte entries; each referenced record carries version/type,
+    /// keyword metadata, then a length-prefixed program-code byte array.
+    private static func inspectSerializedProgramRecords(
+        _ data: Data,
+        objectIndex: Int,
+        platform: Int32,
+        chunkIndex: Int,
+        outputDirectory: URL,
+        outputBaseName: String
+    ) -> [String] {
+        let bytes = [UInt8](data)
+        func i32(_ position: Int) -> Int32? {
+            guard position >= 0, position <= bytes.count - 4 else { return nil }
+            let raw = UInt32(bytes[position]) | (UInt32(bytes[position + 1]) << 8) |
+                (UInt32(bytes[position + 2]) << 16) | (UInt32(bytes[position + 3]) << 24)
+            return Int32(bitPattern: raw)
+        }
+        func aligned(_ position: Int) -> Int? {
+            guard position <= Int.max - 3 else { return nil }
+            return (position + 3) & ~3
+        }
+        func safe(_ value: String) -> String {
+            value.replacingOccurrences(of: "|", with: "_")
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "\r", with: " ")
+        }
+
+        guard let rawCount = i32(0), rawCount > 0, rawCount <= 100_000 else {
+            return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=invalid_subprogram_count"]
+        }
+        let count = Int(rawCount)
+        let entrySize = 8 // Unity 2017.4; UnityPy uses 12 bytes only from 2019.3 onward.
+        let tableEnd = 4 + count * entrySize
+        guard tableEnd >= 4, tableEnd <= bytes.count else {
+            return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=offset_table_out_of_bounds|count=\(count)|bytes=\(bytes.count)"]
+        }
+
+        var offsets: [Int] = []
+        offsets.reserveCapacity(count)
+        for index in 0..<count {
+            guard let rawOffset = i32(4 + index * entrySize), rawOffset >= Int32(tableEnd),
+                  Int(rawOffset) < bytes.count else {
+                return ["serialized_program_parse|object_index=\(objectIndex)|chunk=\(chunkIndex)|status=invalid_record_offset|index=\(index)"]
+            }
+            offsets.append(Int(rawOffset))
+        }
+
+        var validRecords = 0
+        var codeRecords = 0
+        var savedRecords = 0
+        var savedBytes = 0
+        var failures = 0
+        var typeCounts: [Int32: Int] = [:]
+        var samples: [String] = []
+        let maxSavedRecords = 64
+        let maxSavedBytes = 8 * 1024 * 1024
+
+        for index in 0..<count {
+            var cursor = offsets[index]
+            guard let version = i32(cursor), let programType = i32(cursor + 4) else {
+                failures += 1
+                continue
+            }
+            cursor += 20 // version + program type + 12 bytes of platform-specific metadata
+            if version >= 201_608_170 { cursor += 4 }
+
+            guard let keywordCountRaw = i32(cursor), keywordCountRaw >= 0,
+                  keywordCountRaw <= 4096 else {
+                failures += 1
+                continue
+            }
+            let keywordCount = Int(keywordCountRaw)
+            cursor += 4
+            var keywords: [String] = []
+            var recordValid = true
+            for _ in 0..<keywordCount {
+                guard let lengthRaw = i32(cursor), lengthRaw >= 0,
+                      lengthRaw <= 64 * 1024 else {
+                    recordValid = false
+                    break
+                }
+                let length = Int(lengthRaw)
+                cursor += 4
+                guard cursor <= bytes.count, length <= bytes.count - cursor else {
+                    recordValid = false
+                    break
+                }
+                if keywords.count < 8 {
+                    keywords.append(String(decoding: bytes[cursor..<(cursor + length)], as: UTF8.self))
+                }
+                cursor += length
+                guard let next = aligned(cursor), next <= bytes.count else {
+                    recordValid = false
+                    break
+                }
+                cursor = next
+            }
+            guard recordValid, let codeLengthRaw = i32(cursor), codeLengthRaw >= 0,
+                  codeLengthRaw <= 16 * 1024 * 1024 else {
+                failures += 1
+                continue
+            }
+            let codeLength = Int(codeLengthRaw)
+            cursor += 4
+            guard cursor <= bytes.count, codeLength <= bytes.count - cursor else {
+                failures += 1
+                continue
+            }
+
+            validRecords += 1
+            typeCounts[programType, default: 0] += 1
+            if codeLength > 0 {
+                codeRecords += 1
+                if samples.count < 24 {
+                    let keywordText = keywords.map { safe($0) }.joined(separator: ",")
+                    let prefix = bytes[cursor..<min(cursor + 8, cursor + codeLength)]
+                        .map { String(format: "%02x", $0) }.joined()
+                    samples.append("serialized_program_record|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|index=\(index)|version=\(version)|gpu_program_type=\(programType)|keywords=\(keywordCount)|keyword_sample=\(keywordText)|code_bytes=\(codeLength)|code_prefix=\(prefix)|status=parsed")
+                }
+                if savedRecords < maxSavedRecords && codeLength <= maxSavedBytes - savedBytes {
+                    do {
+                        try FileManager.default.createDirectory(at: outputDirectory.appendingPathComponent("ProgramCode", isDirectory: true),
+                                                                withIntermediateDirectories: true)
+                        let codeURL = outputDirectory.appendingPathComponent("ProgramCode", isDirectory: true)
+                            .appendingPathComponent("\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(index)-t\(programType).bin")
+                        try Data(bytes[cursor..<(cursor + codeLength)]).write(to: codeURL, options: .atomic)
+                        savedRecords += 1
+                        savedBytes += codeLength
+                    } catch {
+                        // Keep scanning and report the successfully parsed records.
+                    }
+                }
+            }
+        }
+
+        let types = typeCounts.keys.sorted().map { "\($0):\(typeCounts[$0] ?? 0)" }.joined(separator: ",")
+        return [
+            "serialized_program_parse|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|count=\(count)|valid_records=\(validRecords)|code_records=\(codeRecords)|failures=\(failures)|entry_size=\(entrySize)|status=\(validRecords == count ? "all_records_parsed" : "partial")",
+            "serialized_program_types|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|counts=\(types)|saved_code_records=\(savedRecords)|saved_code_bytes=\(savedBytes)|local_only=true"
+        ] + samples
     }
 
     private static func le32FromData(_ data: Data, _ position: Int) -> UInt32? {
