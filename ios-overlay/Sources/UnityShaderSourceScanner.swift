@@ -150,14 +150,15 @@ enum UnityShaderSourceScanner {
                                     directSerializedBytes += child.length
                                     report.append("unity_serialized_direct|\(path)|bytes=\(child.length)")
                                     report.append(contentsOf: inspectSerializedFileHeader(serializedData).map { "unity_serialized_source|\(path)|\($0)" })
-                                    let inspectIndex = lower == "data/resources.assets" ? 142 : nil
-                                    let objectURL = preparedDirectory
+                                    // Inspect all 25 Shader objects in resources.assets as a bounded comparison set.
+                                    // The aggregate extraction cap below keeps raw game data local and storage use predictable.
+                                    let inspectIndices: Set<Int>? = lower == "data/resources.assets" ? Set(129...153) : nil
+                                    let objectDirectoryURL = preparedDirectory
                                         .appendingPathComponent("ShaderSources", isDirectory: true)
-                                        .appendingPathComponent("resources-assets-shader-object-142.bin")
                                     report.append(contentsOf: try inspectSerializedFileMetadata(
                                         serializedData,
-                                        inspectObjectIndex: inspectIndex,
-                                        outputURL: inspectIndex == nil ? nil : objectURL
+                                        inspectObjectIndices: inspectIndices,
+                                        outputDirectoryURL: inspectIndices == nil ? nil : objectDirectoryURL
                                     ).map { "unity_serialized_source|\(path)|\($0)" })
                                 } else {
                                     report.append("unity_serialized_direct_error|\(path)|read_incomplete")
@@ -454,11 +455,11 @@ enum UnityShaderSourceScanner {
         ]
     }
 
-    /// Reads version-17 metadata and can extract one selected Shader object for local forensic inspection.
+    /// Reads version-17 metadata and can extract a bounded set of Shader objects for local comparison.
     private static func inspectSerializedFileMetadata(
         _ data: Data,
-        inspectObjectIndex: Int? = nil,
-        outputURL: URL? = nil
+        inspectObjectIndices: Set<Int>? = nil,
+        outputDirectoryURL: URL? = nil
     ) throws -> [String] {
         let bytes = [UInt8](data)
         guard bytes.count >= 24,
@@ -574,8 +575,10 @@ enum UnityShaderSourceScanner {
 
         var shaderObjects = 0
         var shaderSamples: [String] = []
-        var forensicReport: [String] = []
-        var selectedObjectExtracted = false
+        var forensicReports: [String] = []
+        var extractedObjectIndices = Set<Int>()
+        var extractedObjectBytes = 0
+        let maximumForensicBytes = 32 * 1024 * 1024
         for objectIndex in 0..<objectCount {
             if format17Uses64BitPathID { cursor = (cursor + 3) & ~3 }
             let pathIDWidth = format17Uses64BitPathID ? 8 : 4
@@ -599,18 +602,25 @@ enum UnityShaderSourceScanner {
                     return ["unity_serialized_metadata_error|shader_object_range_out_of_bounds|object_index=\(objectIndex)"]
                 }
                 shaderSamples.append("shader_object_candidate|object_index=\(objectIndex)|object_byte_start=\(startRaw)|file_offset=\(absoluteStart)|bytes=\(sizeRaw)|type_index=\(typeIndex)")
-                if inspectObjectIndex == objectIndex {
-                    guard let outputURL, sizeRaw > 0, sizeRaw <= 16 * 1024 * 1024 else {
-                        return ["shader_object_forensic_error|selected_object_missing_output_or_unsafe_size"]
+                if inspectObjectIndices?.contains(objectIndex) == true {
+                    guard let outputDirectoryURL, sizeRaw > 0, sizeRaw <= 16 * 1024 * 1024,
+                          extractedObjectBytes <= maximumForensicBytes - Int(sizeRaw) else {
+                        return ["shader_object_forensic_error|object_\(objectIndex)_exceeds_safe_extraction_budget"]
                     }
                     let objectData = data.subdata(in: Int(absoluteStart)..<Int(absoluteEnd))
                     try FileManager.default.createDirectory(
-                        at: outputURL.deletingLastPathComponent(),
+                        at: outputDirectoryURL,
                         withIntermediateDirectories: true
                     )
+                    let outputURL = outputDirectoryURL.appendingPathComponent(
+                        "resources-assets-shader-object-\(objectIndex).bin"
+                    )
                     try objectData.write(to: outputURL, options: .atomic)
-                    forensicReport = inspectShaderObjectBytes(objectData, objectIndex: objectIndex, outputURL: outputURL)
-                    selectedObjectExtracted = true
+                    forensicReports.append(contentsOf: inspectShaderObjectBytes(
+                        objectData, objectIndex: objectIndex, outputURL: outputURL
+                    ))
+                    extractedObjectIndices.insert(objectIndex)
+                    extractedObjectBytes += objectData.count
                 }
             }
             cursor += recordBytes
@@ -621,11 +631,11 @@ enum UnityShaderSourceScanner {
             "unity_serialized_metadata_check|type_table_bounds=true|object_table_bounds=true|object_count_unaligned=true|format=17|path_id_layout_checked=true"
         ]
         result.append(contentsOf: shaderSamples)
-        if let inspectObjectIndex {
-            if selectedObjectExtracted {
-                result.append(contentsOf: forensicReport)
-            } else {
-                result.append("shader_object_forensic_error|object_index_\(inspectObjectIndex)_not_found_as_shader")
+        if let inspectObjectIndices {
+            result.append("shader_object_batch_summary|requested=\(inspectObjectIndices.count)|extracted=\(extractedObjectIndices.count)|bytes=\(extractedObjectBytes)|local_only=true")
+            result.append(contentsOf: forensicReports)
+            for missingIndex in inspectObjectIndices.subtracting(extractedObjectIndices).sorted() {
+                result.append("shader_object_forensic_error|object_index_\(missingIndex)_not_found_as_shader")
             }
         }
         if shaderObjects == 0 {
@@ -659,7 +669,7 @@ enum UnityShaderSourceScanner {
                 if cursor - start >= 4 {
                     let value = String(bytes: bytes[start..<cursor], encoding: .ascii) ?? ""
                     totalStrings += 1
-                    if strings.count < 160 {
+                    if strings.count < 64 {
                         strings.append((start, value))
                     }
                     for marker in markers where markerOffsets[marker, default: []].count < 8 {
@@ -703,7 +713,7 @@ enum UnityShaderSourceScanner {
         let zeroBytes = bytes.reduce(into: 0) { if $1 == 0 { $0 += 1 } }
         let printableBytes = bytes.reduce(into: 0) { if $1 >= 0x20 && $1 <= 0x7e { $0 += 1 } }
         let binarySummary = "shader_object_byte_profile|zero=\(zeroBytes)|printable_ascii=\(printableBytes)|non_ascii_or_control=\(bytes.count - zeroBytes - printableBytes)"
-        let stringLines = strings.prefix(80).map { item in
+        let stringLines = strings.prefix(16).map { item in
             let safe = item.value.replacingOccurrences(of: "|", with: "_")
                 .replacingOccurrences(of: "\\n", with: " ").replacingOccurrences(of: "\\r", with: " ")
             return "shader_object_ascii|offset=\(item.offset)|text=\(safe.prefix(120))"
@@ -711,7 +721,7 @@ enum UnityShaderSourceScanner {
         return [
             "shader_object_forensic|object_index=\(objectIndex)|bytes=\(bytes.count)|raw_file=\(outputURL.lastPathComponent)",
             "shader_object_prefix_hex|\(preview)",
-            "shader_object_ascii_summary|total_strings_scanned=\(totalStrings)|stored_first=\(strings.count)|reported=\(min(strings.count, 80))"
+            "shader_object_ascii_summary|total_strings_scanned=\(totalStrings)|stored_first=\(strings.count)|reported=\(min(strings.count, 16))"
         ] + [binarySummary] + signatureLines + markerLines + stringLines
     }
 
