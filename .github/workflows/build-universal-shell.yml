@@ -278,7 +278,7 @@ jobs:
           echo "UnityFS scanner copied SHA256:"
           shasum -a 256 dm/ios/Sources/UnityShaderSourceScanner.swift
           cmp ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift dm/ios/Sources/UnityShaderSourceScanner.swift
-          grep -q 'unityfs_scanner_revision|prioritize-main-assets-v6-distributed-shader-forensics' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'unityfs_scanner_revision|prioritize-all-serialized-shader-objects-v7' dm/ios/Sources/UnityShaderSourceScanner.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
@@ -293,6 +293,9 @@ jobs:
           grep -q 'shader_object_ascii_sample' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'shader_object_ascii_tail' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'markerCounts' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'inspectAllShaderObjects: true' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'global_budget_remaining=' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'forensicBudgetRemaining: inout Int' dm/ios/Sources/UnityShaderSourceScanner.swift
           swiftc -frontend -parse dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'enum ShaderTranslatorBridge' dm/ios/Sources/ImportScreen.swift
           grep -q 'nxn_translate_shader_jobs' dm/ios/Sources/ImportScreen.swift
@@ -332,10 +335,10 @@ jobs:
               raise SystemExit("Shader scanner contract missing: " + ", ".join(missing))
 
           plan = """Cuphead shader investigation — immediate next steps
-          1. Inspect all 25 Shader objects (indices 129–153) in Data/resources.assets.
-          2. On the iPhone, save each bounded raw object to Documents/PreparedGame/ShaderSources/resources-assets-shader-object-<index>.bin, subject to the 32 MB aggregate cap.
+          1. Inspect Shader objects across every discovered format-17 SerializedFile, not only Data/resources.assets.
+          2. On the iPhone, save bounded raw objects under Documents/PreparedGame/ShaderSources with source-specific filenames and one shared 32 MB extraction budget.
           3. Compare each object's prefix, byte profile, binary signatures, marker hit counts, and printable strings sampled from the beginning, evenly spaced offsets, and end of the full object.
-          4. Use distributed string samples and marker frequencies to identify likely Unity Shader metadata boundaries and candidate program records; do not treat string hits as proof of executable code.
+          4. Use the combined shader inventory and distributed samples to identify likely Unity Shader metadata boundaries and candidate program records; do not treat string hits as proof of executable code.
           5. Parse the confirmed serialized program records, extract Switch shader machine code and metadata, and build translator job JSON.
           6. Run the embedded Ryujinx translator on-device, then compile generated Metal source with Apple's Metal compiler.
           7. Verify the first real Cuphead shader output and preserve a copyable diagnostic report.
