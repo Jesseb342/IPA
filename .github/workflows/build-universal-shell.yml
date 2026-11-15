@@ -379,7 +379,7 @@ jobs:
           8. Keep all game data, jobs, and outputs in the iPhone sandbox. Actions remain build/source-validation only and do not receive user game files or keys.
 
           The 95/95 result proves successful SPIR-V generation, not semantic correctness, Metal compilation, or Cuphead rendering. The wrapper flag remains raw metadata, not a stage definition.
-          """""
+          """
           Path(sys.argv[2]).write_text(plan)
           print("Verified the multi-object Unity Shader extraction safeguards and local-only output contract.")
           print(plan)
