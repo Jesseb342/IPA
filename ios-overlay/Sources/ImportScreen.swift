@@ -1239,6 +1239,35 @@ private struct ImportScreenView: View {
         return FileManager.default.fileExists(atPath: file.path)
     }
 
+    private var cupheadObject141SPIRVKey: String? {
+        cupheadShaderSPIRVKey(objectIndex: 141, subprogramIndex: 8)
+    }
+
+    /// Resolve the fixture from its Unity sidecar instead of hard-coding a code-length suffix.
+    /// Refuse ambiguous matches so a different chunk/variant is never tested by accident.
+    private func cupheadShaderSPIRVKey(objectIndex: Int, subprogramIndex: Int) -> String? {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let directory = documents.appendingPathComponent("ShaderTranslatorVertexSurvey", isDirectory: true)
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil
+        ) else { return nil }
+
+        let matches = files.compactMap { sidecar -> String? in
+            let name = sidecar.lastPathComponent
+            guard name.hasSuffix(".meta.json"),
+                  let data = try? Data(contentsOf: sidecar),
+                  let metadata = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  (metadata["object_index"] as? Int) == objectIndex,
+                  (metadata["subprogram_index"] as? Int) == subprogramIndex,
+                  (metadata["platform"] as? Int) == 19,
+                  (metadata["gpu_program_type"] as? Int) == 26 else { return nil }
+            let key = String(name.dropLast(".meta.json".count))
+            let spirv = directory.appendingPathComponent(key + ".spv")
+            return FileManager.default.fileExists(atPath: spirv.path) ? key : nil
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -1515,7 +1544,12 @@ private struct ImportScreenView: View {
 
                     if gameExtracted {
                         Button {
-                            Task { await convertCupheadVertexShaderToMetal() }
+                            Task {
+                                await convertCupheadShaderToMetal(
+                                    key: "data-resources-assets-shader-object-138-p19-c0-s12-t26-len3936",
+                                    fixture: "object=138|subprogram=12"
+                                )
+                            }
                         } label: {
                             Label(testingCupheadMetalShader ? "Converting and compiling object 138…" : "Convert object 138 to MSL + Metal",
                                   systemImage: "cpu")
@@ -1526,6 +1560,28 @@ private struct ImportScreenView: View {
                         .disabled(!cupheadObject138SPIRVAvailable || testingCupheadMetalShader || testingShaderTranslator || extracting || rewritingModules)
                         if !cupheadObject138SPIRVAvailable {
                             Text("Run Inspect Unity Shader Objects and Survey all Cuphead vertex shaders first.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let object141Key = cupheadObject141SPIRVKey {
+                            Button {
+                                Task {
+                                    await convertCupheadShaderToMetal(
+                                        key: object141Key,
+                                        fixture: "object=141|subprogram=8|expected=storage-buffer"
+                                    )
+                                }
+                            } label: {
+                                Label(testingCupheadMetalShader ? "Converting and compiling object 141…" : "Convert object 141 / subprogram 8 to MSL + Metal",
+                                      systemImage: "externaldrive.badge.cpu")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(testingCupheadMetalShader || testingShaderTranslator || extracting || rewritingModules)
+                        } else {
+                            Text("Object 141 / subprogram 8 becomes available after Inspect Unity Shader Objects and Survey all Cuphead vertex shaders. The app resolves it from its Unity metadata sidecar.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
@@ -2159,19 +2215,20 @@ private struct ImportScreenView: View {
             shaderTranslatorLog = "survey_failed|\(error.localizedDescription)"
         }
     }
-    private func convertCupheadVertexShaderToMetal() async {
+    private func convertCupheadShaderToMetal(key: String, fixture: String) async {
         testingCupheadMetalShader = true
         cupheadMetalShaderLog = ""
         defer { testingCupheadMetalShader = false }
 
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let survey = documents.appendingPathComponent("ShaderTranslatorVertexSurvey", isDirectory: true)
-        let key = "data-resources-assets-shader-object-138-p19-c0-s12-t26-len3936"
         let spirv = survey.appendingPathComponent(key + ".spv")
         let msl = survey.appendingPathComponent(key + ".metal")
         let diagnostics = survey.appendingPathComponent(key + ".spirv-cross.txt")
+        let reflectionURL = survey.appendingPathComponent(key + ".res.json")
         do {
             let result = try await Task.detached(priority: .userInitiated) {
+                let spirvData = try Data(contentsOf: spirv)
                 try SPIRVCrossBridge.convert(input: spirv, output: msl, diagnostics: diagnostics)
                 let source = try String(contentsOf: msl, encoding: .utf8)
                 let library = try OnDeviceMetalCompiler.compile(source: source)
@@ -2179,21 +2236,59 @@ private struct ImportScreenView: View {
                 let diagnosticText = (try String(contentsOf: diagnostics, encoding: .utf8))
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: "\n", with: "; ")
-                return [
+                func clean(_ value: String) -> String {
+                    value.replacingOccurrences(of: "|", with: "_")
+                        .replacingOccurrences(of: "\n", with: " ")
+                        .replacingOccurrences(of: "\r", with: " ")
+                }
+                var report = [
+                    "fixture|\(fixture)",
                     "sample|\(key)",
-                    "spirv_bytes|\((try Data(contentsOf: spirv)).count)",
+                    "spirv_bytes|\(spirvData.count)",
                     "msl_bytes|\((try Data(contentsOf: msl)).count)",
                     "spirv_cross|\(diagnosticText)",
                     "metal_compile|success",
                     "metal_functions|\(names.isEmpty ? "none reported" : names.joined(separator: ","))",
-                    "metal_library|created",
-                    "scope|vertex library compilation only; no render pipeline or game rendering tested"
-                ].joined(separator: "\n")
+                    "metal_library|created"
+                ]
+                if let reflectionData = try? Data(contentsOf: reflectionURL),
+                   let reflection = try? JSONSerialization.jsonObject(with: reflectionData) as? [String: Any] {
+                    for (label, field) in [
+                        ("texture", "textures"), ("image", "images"),
+                        ("constant_buffer", "cbufs"), ("storage_buffer", "sbufs")
+                    ] {
+                        let rows = reflection[field] as? [[String: Any]] ?? []
+                        report.append("translator_\(label)_count|\(rows.count)")
+                        for (index, row) in rows.prefix(12).enumerated() {
+                            let details = row.keys.sorted().compactMap { name -> String? in
+                                guard let value = row[name] else { return nil }
+                                return "\(name)=\(clean(String(describing: value)))"
+                            }.joined(separator: ",")
+                            report.append("translator_\(label)|index=\(index)|\(details)")
+                        }
+                    }
+                    let notes = (reflection["notes"] as? [String] ?? []).map(clean)
+                    report.append("translator_notes|\(notes.isEmpty ? "none" : notes.joined(separator: "; "))")
+                } else {
+                    report.append("translator_reflection|missing_or_invalid")
+                }
+                let structural = ShaderSPIRVReflection.report(spirvData, key: key).filter {
+                    $0.hasPrefix("spirv_reflection|") ||
+                    $0.hasPrefix("interface_input|") ||
+                    $0.hasPrefix("interface_output|") ||
+                    $0.hasPrefix("spirv_descriptor|") ||
+                    $0.hasPrefix("spirv_buffer_layout|") ||
+                    $0.hasPrefix("spirv_buffer_member|")
+                }
+                report.append(contentsOf: structural.prefix(48))
+                report.append("scope|vertex library compilation only; no render pipeline or game rendering tested")
+                return report.joined(separator: "\n")
             }.value
             cupheadMetalShaderLog = result
         } catch {
             let diagnostic = (try? String(contentsOf: diagnostics, encoding: .utf8)) ?? ""
-            cupheadMetalShaderLog = "failed|\(error.localizedDescription)" + (diagnostic.isEmpty ? "" : "\nspirv_cross_diagnostics|\(diagnostic)")
+            cupheadMetalShaderLog = "failed|\(error.localizedDescription)" +
+                (diagnostic.isEmpty ? "" : "\nspirv_cross_diagnostics|\(diagnostic)")
         }
     }
 
