@@ -362,17 +362,17 @@ jobs:
           if missing:
               raise SystemExit("Shader scanner contract missing: " + ", ".join(missing))
 
-          plan = """Cuphead shader investigation — first native translation probe
-          1. Preserve the complete Unity 2017.4 ShaderProgram parser and its bounded on-device extraction; do not regress to first-N-only sampling.
-          2. The uploaded NVNSPLIT1 archive was independently validated: 64/64 samples reconstruct byte-for-byte from 342 split entries.
-          3. Decode stage from NVIDIA Maxwell SPH CommonWord0, not from the raw wrapper flag: 28 vertex programs and 36 pixel programs were identified.
-          4. SPH version and SASS version are 3 in all 64 samples. All instruction areas are multiples of 32 bytes, matching Maxwell's 32-byte bundles (one 64-bit control word plus three 64-bit SASS instructions).
-          5. The app now creates a bounded translator job for the smallest vertex sample with an empty c1 tail. The job contains the 0x50-byte SPH plus SASS bytes, stage=vs, and no guessed c1 payload.
-          6. Manually build/install the shell and run Translate one Cuphead vertex shader. Inspect SPIR-V validity, resource reflection, and translator notes. Default resource answers are diagnostic fallbacks, not proof of game-correct types.
-          7. Only after the vertex probe is understood, resolve texture/image/attribute types from shader instructions and Unity serialized ShaderProgram/pass/variant metadata before testing fragment shaders or Metal compilation.
-          8. Keep all game data, decoded payloads, generated jobs, and translator output inside the iPhone app sandbox. Actions compile the generic shell and validate source contracts only; they do not receive user game files or keys.
+          plan = """Cuphead shader investigation — vertex-program survey
+          1. Preserve the complete Unity 2017.4 ShaderProgram parser and bounded on-device extraction.
+          2. The 64-sample NVNSPLIT1 archive validates byte-for-byte; SPH CommonWord0 identifies 28 vertex and 36 pixel programs, all SASS v3.
+          3. The first real Cuphead vertex sample translated successfully: 384 SASS bytes / 12 bundles produced a valid 1,940-byte SPIR-V module with no translator notes and no reflected descriptors.
+          4. The app now prepares a batch of all bounded Cuphead vertex samples, including each sample's c1 tail in the translator job. It reports per-shader SPIR-V validity, reflection counts, and failures.
+          5. Manually build/install the shell and run Survey all Cuphead vertex shaders. Use the resulting ranking to identify resource-bearing or more representative programs.
+          6. Resource answers remain diagnostic defaults where unknown. Do not claim correct attribute, texture, or image typing from SPIR-V validity alone.
+          7. Reconcile resource/interface metadata with Unity serialized ShaderProgram/pass/variant records, then test pixel programs and SPIR-V-to-MSL/Metal compilation.
+          8. Keep all game data, jobs, and outputs in the iPhone sandbox. Actions remain build/source-validation only and do not receive user game files or keys.
           
-          The wrapper flag remains raw metadata despite correlating with stage in this sample set. No successful Cuphead translation, Metal compilation, or rendering is claimed until the on-device test report demonstrates it.
+          No Cuphead Metal compilation or game rendering is claimed. The wrapper flag remains raw metadata, not a stage definition.
           """
           Path(sys.argv[2]).write_text(plan)
           print("Verified the multi-object Unity Shader extraction safeguards and local-only output contract.")
