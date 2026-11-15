@@ -673,7 +673,7 @@ The user has now run the updated IPA on an iPhone and reported **successful rend
 - SPIRV-Cross 0.64.0, MSL 2.3.0; Metal library created with function `main0`.
 - `render_pipeline|created`, using the same provisional two-`float4` input layout and stride 32.
 - Translator resources: two constant buffers (binding 3/slot 1 and binding 2/slot 3), one storage buffer (binding 1, slot 0, constant-buffer slot 0, offset 68), no texture/image, and no translator notes.
-- SPIR-V reflection: two inputs, four outputs, four descriptors, four buffer layouts. `vp_s0) is a runtime `u32` array with 4-byte stride; the other common descriptors are `support_buffer`, `vp_c3`, and `vp_c1`.
+- SPIR-V reflection: two inputs, four outputs, four descriptors, four buffer layouts. `vp_s0` is a runtime `u32` array with 4-byte stride; the other common descriptors are `support_buffer`, `vp_c3`, and `vp_c1`.
 
 ### What is now established
 
