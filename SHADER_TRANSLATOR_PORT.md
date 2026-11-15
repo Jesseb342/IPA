@@ -541,7 +541,7 @@ The survey/report path has been extended to make the next run more informative:
 4. **Buffer layout:** for uniform/storage-buffer struct variables, the report lists member names, member indices, explicit byte offsets where present, and member types.
 5. **Translator resource details:** the top eight candidates now include the translator's individual texture, image, constant-buffer, and storage-buffer reflection records, rather than only counts, plus translator notes.
 
-The parser reports only the metadata it actually decodes. In particular, member offsets and types are not a complete ABI layout: array/matrix strides, every packing rule, and host-side binding correctness still need validation. The Unity sidecar ties a sample to its Shader object and subprogram index and preserves its keyword list; it does not yet identify a human-readable ShaderLab pass name or prove the exact pass/variant linkage.
+The parser reports only the metadata it actually decodes. It now includes interface-block member decorations and reports explicit member offsets plus array/matrix strides when those SPIR-V decorations are present. This is still not a complete ABI layout: row/column-major interpretation, every packing/alignment rule, implicit padding, and host-side binding correctness still need validation. The Unity sidecar ties a sample to its Shader object and subprogram index and preserves its keyword list; it does not yet identify a human-readable ShaderLab pass name or prove the exact pass/variant linkage.
 
 ### Next manual test
 
