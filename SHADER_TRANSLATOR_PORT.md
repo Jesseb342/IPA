@@ -367,3 +367,32 @@ The important new value is breadth: the refreshed scan confirms the same parser 
 The next investigation should move from scanning more records to decoding the internal code-payload structure. Compare representative saved payloads from objects 142, 143, and 146, including the 2,912-byte family and the longer 8,032-/10,080-byte object-146 records. Map the repeated little-endian header fields and locate the boundary between metadata and executable instructions. Identify the platform-19 / GPU-type-26 encoding with authoritative evidence before writing a decoder or connecting it to the translator. No translator invocation or successful shader translation is demonstrated by this B.
 
 **Verification status:** fresh on-device scan; 65/65 chunks and 5,698/5,698 records parsed. Shader translation and Cuphead rendering remain unverified.
+
+
+## On-device raw sample analysis — 2026-11-15
+
+The uploaded `UnityShaderSamples.nxsamples` archive was parsed locally. Its `NXSAMP1` container is internally consistent: the manifest declares 64 samples / 240,640 payload bytes, and all 64 entry headers, UTF-8 names, payload lengths, and end offsets validate exactly. The archive contains 58 unique payloads and six exact duplicate pairs (SHA-256 grouping).
+
+### Confirmed per-payload structure
+
+All 64 samples share this 16-byte little-endian wrapper:
+
+- +0x00: a 32-bit value of 0 or 1 (28 and 36 samples respectively; semantics not yet identified).
+- +0x04: zero.
+- +0x08: control-section length, always 0x850 (2,128 bytes).
+- +0x0C: code-area length, variable (0x100 through 0x2200 in the sample set).
+
+The control section begins at +0x10, has magic `0x98761234`, and stores its own length `0x850` at control-relative +0x20. The code area immediately follows the control section, begins with magic `0x12345678`, and its declared length exactly reaches the end of every sample. All 64 records therefore pass the same strict bounds checks.
+
+The code-area layout matches the documented NVN graphics layout: a 0x30-byte header with magic `0x12345678`, followed by a 0x50-byte SPH, with instruction bytes beginning at code-relative +0x80. All 64 samples have the graphics magic; none has the documented compute magic `0x12345679`. This positively identifies the extracted records as structured Nintendo Switch NVN graphics-program payloads, rather than an unknown generic binary or a direct SPIR-V blob.
+
+### Important unresolved control-field difference
+
+In these samples, control-relative +0x700 is `0x850`, +0x704 is zero, and +0x708 is `code_area_length - 0x70`. The newer NVN reference describes +0x700/+0x704 differently for another title/layout. Do not copy those field meanings into the Cuphead parser without resolving this Unity 2017-era variation. The wrapper's first 32-bit field (0/1) is also still unclassified and must not yet be treated as a vertex/fragment stage flag.
+
+### Translator implications and next step
+
+The existing `SwshXlate.cs` job contract expects graphics input as the 0x50-byte SPH plus instruction bytes, not the leading 0x30-byte NVN code-area header. A first controlled parser can therefore validate and strip that 0x30-byte header, but it must also extract or establish the correct control-section/c1 data, stage identity, and resource metadata before invoking the translator. The translator's current comments identify c1 as necessary for resolving indirect BRX jump targets; do not silently substitute an empty c1 buffer.
+
+Next: implement a read-only validator/splitter for this 16-byte wrapper, the 0x850 control section, and the NVN graphics code area; record the unresolved wrapper/control fields; then determine c1 and stage metadata from the control/SPH structures. Only after those checks should one sample be passed through the on-device translator and compared with a known-good upstream output. This archive does not yet prove a shader has translated successfully or that Cuphead renders.
+
