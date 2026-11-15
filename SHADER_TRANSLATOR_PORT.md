@@ -694,3 +694,22 @@ The app report previously emitted an outdated final `scope|` line saying no rend
 Stop broad shader-translation surveying for now. Preserve these two fixtures as regression tests and move to an offscreen draw test with explicit synthetic vertex data and minimally valid resource buffers. Before treating that as a Cuphead rendering test, recover the authoritative Unity/NVN vertex declaration and resource ABI. For object 138, texture handle 8 and its unknown format/dimension need investigation; for object 141, the storage-buffer mapping at binding 1 / offset 68 needs a host-side binding match. The generated `.metal` source should be inspected/exported to confirm exact MSL argument-buffer and attribute annotations before adding resource bindings.
 
 **Build status:** the report update and corrected scope string are source/documentation changes only. No workflow has been dispatched. The user must manually run **Build Universal NxNative Shell** to receive the corrected report wording; the already reported pipeline successes are from the prior build.
+
+
+## Cuphead offscreen GPU draw smoke test — implementation — 2026-11-15
+
+Both object 138/subprogram 12 and object 141/subprogram 8 have now passed on-device MSL generation, Metal library compilation, and render-pipeline state creation. The next test is implemented in source as `runFixtureOffscreenDraw` and is invoked automatically by each existing fixture conversion action after pipeline creation.
+
+The test:
+
+1. Builds the same provisional two-`float4` vertex descriptor, but places vertex attributes in Metal buffer slot 30 to keep them separate from reflected shader resources.
+2. Requests Metal render-pipeline reflection and inspects the vertex-stage arguments.
+3. Allocates zero-filled shared buffers for reflected buffer arguments, a white 1×1 placeholder texture for reflected texture arguments, and default samplers for sampler arguments. Unsupported resource arrays or resource types fail with an explicit diagnostic rather than being silently skipped. Reflected argument index 30 is rejected because it conflicts with the reserved vertex-data slot.
+4. Creates a 64×64 shared BGRA render target, supplies three synthetic interleaved float4/float4 vertices, binds reflected placeholder resources, submits one triangle draw, waits for command-buffer completion, and reads the target pixels back.
+5. Reports GPU command completion, resource counts/binding indices, readback status, and the number of non-clear pixels. Zero non-clear pixels is reported rather than misrepresented as a visible successful triangle.
+
+This is a GPU execution smoke test only. Zero-filled buffers are not valid Cuphead constant/storage-buffer contents; the white texture is not the game's sampled texture; the synthetic vertex layout remains provisional; the fragment shader is synthetic. A completed draw proves the GPU accepted and executed the submitted work with the placeholder resources, not that the original shader produces correct output or that Cuphead renders.
+
+**Important implementation detail:** the pipeline reflection is used to bind all reflected vertex resources instead of guessing SPIRV-Cross's MSL buffer/texture indices. The vertex attribute data is kept in slot 30. If a fixture requires unsupported texture dimensionality, resource arrays, or resource argument types, the report will show a controlled draw failure while preserving its earlier MSL/library/pipeline successes.
+
+**Build status:** source and manual-workflow gates are updated, but no workflow is dispatched and no on-device draw result exists yet. The user must manually run **Build Universal NxNative Shell**, install the IPA, and run both conversion fixtures. The first report should be checked for `gpu_draw|completed`, `draw_readback|success`, resource bindings, and `draw_nonclear_pixels`.
