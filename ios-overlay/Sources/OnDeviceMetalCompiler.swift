@@ -21,6 +21,8 @@ enum OnDeviceMetalCompiler {
                 return "The translated Metal shader source is empty."
             case .missingFunction(let name):
                 return "Metal compiled the source, but the requested function '\(name)' was not found."
+            case .fixture(let message):
+                return message
             }
         }
     }
