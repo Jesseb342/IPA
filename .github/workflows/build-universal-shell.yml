@@ -329,6 +329,8 @@ jobs:
           grep -q 'translated_valid_spirv' dm/ios/Sources/ImportScreen.swift
           grep -q 'private enum ShaderSPIRVReflection' dm/ios/Sources/ImportScreen.swift
           grep -q 'spirv_buffer_member' dm/ios/Sources/ImportScreen.swift
+          grep -q 'matrix_stride=' dm/ios/Sources/ImportScreen.swift
+          grep -q 'interface_\\(dir)_member' dm/ios/Sources/ImportScreen.swift
           grep -q 'unity_metadata_sidecars' dm/ios/Sources/ImportScreen.swift
           grep -q 'sourceMetadataURL = url.appendingPathExtension("meta.json")' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'keyword_count' dm/ios/Sources/UnityShaderSourceScanner.swift
