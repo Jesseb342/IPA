@@ -1433,8 +1433,8 @@ enum UnityShaderSourceScanner {
         var codeRecords = 0
         var savedRecords = 0
         var savedBytes = 0
-        var selectedPayloadsByLength: [Int: (index: Int, programType: Int32, payload: [UInt8], hash: String)] = [:]
-        var duplicatePayloadSample: (index: Int, length: Int, programType: Int32, payload: [UInt8], hash: String)?
+        var selectedPayloadsByLength: [Int: (index: Int, version: Int32, programType: Int32, keywords: [String], keywordCount: Int, payload: [UInt8], hash: String)] = [:]
+        var duplicatePayloadSample: (index: Int, length: Int, version: Int32, programType: Int32, keywords: [String], keywordCount: Int, payload: [UInt8], hash: String)?
         var failures = 0
         var typeCounts: [Int32: Int] = [:]
         var lengthCounts: [Int: Int] = [:]
@@ -1494,9 +1494,7 @@ enum UnityShaderSourceScanner {
                     recordValid = false
                     break
                 }
-                if keywords.count < 8 {
-                    keywords.append(String(decoding: bytes[cursor..<(cursor + length)], as: UTF8.self))
-                }
+                keywords.append(String(decoding: bytes[cursor..<(cursor + length)], as: UTF8.self))
                 cursor += length
                 guard let next = aligned(cursor), next <= recordEnd else {
                     recordValid = false
@@ -1556,14 +1554,14 @@ enum UnityShaderSourceScanner {
                 if selectedPayloadsByLength[codeLength] == nil,
                    selectedPayloadsByLength.count < maxSavedRecords,
                    codeLength <= maxSavedBytes - savedBytes {
-                    selectedPayloadsByLength[codeLength] = (index, programType, payload, payloadHash)
+                    selectedPayloadsByLength[codeLength] = (index, version, programType, keywords, keywordCount, payload, payloadHash)
                     savedBytes += codeLength
                 } else if duplicatePayloadSample == nil,
                           selectedPayloadsByLength.values.contains(where: { $0.hash == payloadHash }),
                           codeLength <= maxSavedBytes - savedBytes {
                     // One exact duplicate is useful for distinguishing record metadata
                     // from payload bytes without exporting every repeated record.
-                    duplicatePayloadSample = (index, codeLength, programType, payload, payloadHash)
+                    duplicatePayloadSample = (index, codeLength, version, programType, keywords, keywordCount, payload, payloadHash)
                     savedBytes += codeLength
                 }
             }
@@ -1578,6 +1576,19 @@ enum UnityShaderSourceScanner {
             )
             do {
                 try Data(sample.payload).write(to: codeURL, options: .atomic)
+                let metadata: [String: Any] = [
+                    "object_index": objectIndex,
+                    "platform": platform,
+                    "chunk": chunkIndex,
+                    "subprogram_index": sample.index,
+                    "record_version": sample.version,
+                    "gpu_program_type": sample.programType,
+                    "keyword_count": sample.keywordCount,
+                    "keywords": sample.keywords
+                ]
+                let metadataURL = codeURL.appendingPathExtension("meta.json")
+                let metadataData = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
+                try metadataData.write(to: metadataURL, options: .atomic)
                 savedRecords += 1
             } catch { }
         }
@@ -1588,6 +1599,19 @@ enum UnityShaderSourceScanner {
             )
             do {
                 try Data(duplicate.payload).write(to: duplicateURL, options: .atomic)
+                let metadata: [String: Any] = [
+                    "object_index": objectIndex,
+                    "platform": platform,
+                    "chunk": chunkIndex,
+                    "subprogram_index": duplicate.index,
+                    "record_version": duplicate.version,
+                    "gpu_program_type": duplicate.programType,
+                    "keyword_count": duplicate.keywordCount,
+                    "keywords": duplicate.keywords
+                ]
+                let metadataURL = duplicateURL.appendingPathExtension("meta.json")
+                let metadataData = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
+                try metadataData.write(to: metadataURL, options: .atomic)
                 savedRecords += 1
                 savedDuplicate = true
             } catch { }
