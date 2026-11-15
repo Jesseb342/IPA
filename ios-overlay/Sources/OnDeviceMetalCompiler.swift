@@ -188,15 +188,20 @@ enum OnDeviceMetalCompiler {
                 // The encoder is created below; retain the resource until binding.
                 resources.buffers[argument.index] = buffer
             case .texture:
+                guard argument.textureType == .type2D, argument.arrayLength == 1 else {
+                    throw CompilerError.missingFunction(
+                        "Offscreen fixture currently supports only single 2D textures; argument index \\(argument.index), type \\(argument.textureType.rawValue), array length \\(argument.arrayLength)"
+                    )
+                }
                 let textureDescriptor = MTLTextureDescriptor()
-                textureDescriptor.textureType = argument.textureType
+                textureDescriptor.textureType = .type2D
                 textureDescriptor.pixelFormat = .rgba8Unorm
                 textureDescriptor.width = 1
                 textureDescriptor.height = 1
                 textureDescriptor.depth = 1
                 textureDescriptor.mipmapLevelCount = 1
                 textureDescriptor.sampleCount = 1
-                textureDescriptor.arrayLength = argument.textureType == .typeCube ? 6 : max(1, argument.arrayLength)
+                textureDescriptor.arrayLength = 1
                 textureDescriptor.usage = [.shaderRead]
                 guard let texture = device.makeTexture(descriptor: textureDescriptor) else {
                     throw CompilerError.missingFunction("Could not allocate placeholder texture at index \(argument.index), type \(argument.textureType.rawValue)")
