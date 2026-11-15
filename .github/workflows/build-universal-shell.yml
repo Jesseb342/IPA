@@ -264,6 +264,62 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      - name: Build SPIRV-Cross MSL converter for iPhone ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="$RUNNER_TEMP/spirv-cross"
+          BUILD="$RUNNER_TEMP/spirv-cross-ios"
+          FRAMEWORK="$RUNNER_TEMP/NxNativeSPIRVCross.framework"
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          git clone --depth 1 --branch vulkan-sdk-1.3.296.0 https://github.com/KhronosGroup/SPIRV-Cross.git "$SRC"
+          cmake -S "$SRC" -B "$BUILD" -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DSPIRV_CROSS_STATIC=ON \
+            -DSPIRV_CROSS_SHARED=OFF \
+            -DSPIRV_CROSS_ENABLE_C_API=ON \
+            -DSPIRV_CROSS_ENABLE_GLSL=ON \
+            -DSPIRV_CROSS_ENABLE_MSL=ON \
+            -DSPIRV_CROSS_CLI=OFF \
+            -DSPIRV_CROSS_ENABLE_TESTS=OFF
+          cmake --build "$BUILD" --config Release --target spirv-cross-c
+          LINK_ARGS=""
+          while IFS= read -r LIB; do LINK_ARGS="$LINK_ARGS -Wl,-force_load,$LIB"; done < <(find "$BUILD" -name 'libspirv-cross-*.a' -type f | sort -r)
+          LIB_COUNT="$(find "$BUILD" -name 'libspirv-cross-*.a' -type f | wc -l | tr -d ' ')"
+          test "$LIB_COUNT" -ge 4
+          mkdir -p "$FRAMEWORK"
+          clang++ -std=c++17 -arch arm64 -isysroot "$SDK" -miphoneos-version-min=15.0 \
+            -O2 -fvisibility=hidden -dynamiclib \
+            -I "$SRC" -I "$SRC/include" \
+            ipa-overlay/ios-overlay/native/spirv_cross_bridge.cpp \
+            $LINK_ARGS -lc++ \
+            -Wl,-install_name,@rpath/NxNativeSPIRVCross.framework/NxNativeSPIRVCross \
+            -o "$FRAMEWORK/NxNativeSPIRVCross"
+          cat > "$FRAMEWORK/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>NxNativeSPIRVCross</string>
+            <key>CFBundleIdentifier</key><string>org.nxnative.spirvcross</string>
+            <key>CFBundleName</key><string>NxNativeSPIRVCross</string>
+            <key>CFBundlePackageType</key><string>FMWK</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>MinimumOSVersion</key><string>15.0</string>
+          </dict>
+          </plist>
+          PLIST
+          lipo -verify_arch arm64 "$FRAMEWORK/NxNativeSPIRVCross"
+          nm -gU "$FRAMEWORK/NxNativeSPIRVCross" | grep -q '_nxn_spirv_to_msl_file'
+          echo "SPIRV-Cross MSL bridge built for iPhone ARM64:"
+          ls -lh "$FRAMEWORK/NxNativeSPIRVCross"
+          otool -L "$FRAMEWORK/NxNativeSPIRVCross"
+
       - name: Apply IPA import-screen overlay
         shell: bash
         run: |
@@ -272,6 +328,7 @@ jobs:
           python3 -m py_compile ipa-overlay/ios-overlay/tools/apply_import_ui.py
           cp ipa-overlay/ios-overlay/Sources/ImportScreen.swift dm/ios/Sources/ImportScreen.swift
           cp ipa-overlay/ios-overlay/Sources/OnDeviceMetalCompiler.swift dm/ios/Sources/OnDeviceMetalCompiler.swift
+          cp ipa-overlay/ios-overlay/Sources/SPIRVCrossBridge.swift dm/ios/Sources/SPIRVCrossBridge.swift
           cp ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift dm/ios/Sources/UnityShaderSourceScanner.swift
           echo "UnityFS scanner source SHA256:"
           shasum -a 256 ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift
@@ -304,6 +361,9 @@ jobs:
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
           grep -q 'enum OnDeviceMetalCompiler' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'enum SPIRVCrossBridge' dm/ios/Sources/SPIRVCrossBridge.swift
+          grep -q 'nxn_spirv_to_msl_file' dm/ios/Sources/SPIRVCrossBridge.swift
+          swiftc -frontend -parse dm/ios/Sources/SPIRVCrossBridge.swift
           grep -q 'enum UnityShaderSourceScanner' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'Inspect Unity Shader Objects' dm/ios/Sources/ImportScreen.swift
           grep -q 'format17Uses64BitPathID' dm/ios/Sources/UnityShaderSourceScanner.swift
@@ -338,6 +398,9 @@ jobs:
           grep -q 'File.WriteAllText' ipa-overlay/translator-probe/SwshXlate.cs
           swiftc -frontend -parse dm/ios/Sources/ImportScreen.swift
           grep -q 'makeLibrary(source: source, options: options)' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'Convert object 138 to MSL + Metal' dm/ios/Sources/ImportScreen.swift
+          grep -q 'SPIRVCrossBridge.convert(input:' dm/ios/Sources/ImportScreen.swift
+          grep -q 'no render pipeline or game rendering tested' dm/ios/Sources/ImportScreen.swift
           echo "IPA import UI overlay applied."
 
       # Shader milestone: move from reporting candidate offsets to extracting
@@ -443,6 +506,12 @@ jobs:
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_inspect_nso'
           nm -gU "$FRAMEWORK/NxNativeMetadataProbe" | grep -q '_nxn_rewrite_nso'
 
+          # Embed the SPIRV-Cross converter framework for on-device SPIR-V to MSL.
+          SPIRV_CROSS_FRAMEWORK="$FRAMEWORKS/NxNativeSPIRVCross.framework"
+          cp -R "$RUNNER_TEMP/NxNativeSPIRVCross.framework" "$SPIRV_CROSS_FRAMEWORK"
+          test -s "$SPIRV_CROSS_FRAMEWORK/NxNativeSPIRVCross"
+          nm -gU "$SPIRV_CROSS_FRAMEWORK/NxNativeSPIRVCross" | grep -q '_nxn_spirv_to_msl_file'
+
           # Embed the Ryujinx NativeAOT translator as a real iOS framework.
           TRANSLATOR_FRAMEWORK="$FRAMEWORKS/NxNativeShaderTranslator.framework"
           SOURCE_TRANSLATOR="$RUNNER_TEMP/nxn-shader-translator/NxNativeShaderTranslator.framework"
@@ -462,6 +531,7 @@ jobs:
 
           # Sign both nested frameworks before re-signing the containing app.
           codesign --force --sign - --timestamp=none "$ARM64_FRAMEWORK"
+          codesign --force --sign - --timestamp=none "$SPIRV_CROSS_FRAMEWORK"
           codesign --force --sign - --timestamp=none "$TRANSLATOR_FRAMEWORK"
           codesign --force --sign - --timestamp=none "$FRAMEWORK"
           codesign --force --sign - --timestamp=none \
@@ -548,6 +618,11 @@ jobs:
             echo "::error::The LibHac metadata framework is missing from the app."
             exit 1
           }
+          test -s "$APP/Frameworks/NxNativeSPIRVCross.framework/NxNativeSPIRVCross" || {
+            echo "::error::The SPIRV-Cross MSL framework is missing from the app."
+            exit 1
+          }
+          nm -gU "$APP/Frameworks/NxNativeSPIRVCross.framework/NxNativeSPIRVCross" | grep -q '_nxn_spirv_to_msl_file'
           test -s "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator" || {
             echo "::error::The Ryujinx shader translator framework is missing from the app."
             exit 1
