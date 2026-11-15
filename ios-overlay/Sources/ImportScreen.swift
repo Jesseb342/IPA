@@ -89,6 +89,7 @@ private enum ShaderSPIRVReflection {
         guard w[0] == 0x07230203 else { return ["spirv_reflection|key=\(key)|status=bad_magic"] }
         var names: [UInt32:String] = [:], memberNames: [UInt64:String] = [:]
         var dec: [UInt32:[UInt32:UInt32]] = [:], offsets: [UInt64:UInt32] = [:]
+        var memberDec: [UInt64:[UInt32:UInt32]] = [:], arrayStrides: [UInt32:UInt32] = [:]
         var kind: [UInt32:String] = [:], a: [UInt32:UInt32] = [:], z: [UInt32:UInt32] = [:]
         var members: [UInt32:[UInt32]] = [:], constants: [UInt32:UInt32] = [:], vars: [Variable] = []
         func mk(_ t: UInt32, _ m: UInt32) -> UInt64 { (UInt64(t) << 32) | UInt64(m) }
@@ -109,6 +110,7 @@ private enum ShaderSPIRVReflection {
             switch op {
             case 5: if x.count >= 2 { names[x[x.startIndex]] = str(x.dropFirst()) }
             case 6: if x.count >= 3 { memberNames[mk(x[x.startIndex], x[x.startIndex+1])] = str(x.dropFirst(2)) }
+            case 20: if !x.isEmpty { kind[x[x.startIndex]]="bool" }
             case 21: if x.count >= 3 { kind[x[x.startIndex]]="int"; a[x[x.startIndex]]=x[x.startIndex+1]; z[x[x.startIndex]]=x[x.startIndex+2] }
             case 22: if x.count >= 2 { kind[x[x.startIndex]]="float"; a[x[x.startIndex]]=x[x.startIndex+1] }
             case 23,24: if x.count >= 3 { kind[x[x.startIndex]] = op == 23 ? "vector" : "matrix"; a[x[x.startIndex]]=x[x.startIndex+1]; z[x[x.startIndex]]=x[x.startIndex+2] }
@@ -121,8 +123,18 @@ private enum ShaderSPIRVReflection {
             case 32: if x.count >= 3 { kind[x[x.startIndex]]="pointer"; a[x[x.startIndex]]=x[x.startIndex+1]; z[x[x.startIndex]]=x[x.startIndex+2] }
             case 43: if x.count >= 3 { constants[x[x.startIndex+1]]=x[x.startIndex+2] }
             case 59: if x.count >= 3 { vars.append(Variable(type:x[x.startIndex], id:x[x.startIndex+1], storage:x[x.startIndex+2])) }
-            case 71: if x.count >= 2 { dec[x[x.startIndex], default:[:]][x[x.startIndex+1]] = x.count >= 3 ? x[x.startIndex+2] : 1 }
-            case 72: if x.count >= 4 && x[x.startIndex+2] == 35 { offsets[mk(x[x.startIndex],x[x.startIndex+1])] = x[x.startIndex+3] }
+            case 71: if x.count >= 2 {
+                let target = x[x.startIndex], decoration = x[x.startIndex+1]
+                let value = x.count >= 3 ? x[x.startIndex+2] : 1
+                dec[target, default:[:]][decoration] = value
+                if decoration == 6 { arrayStrides[target] = value }
+            }
+            case 72: if x.count >= 3 {
+                let target = x[x.startIndex], member = x[x.startIndex+1], decoration = x[x.startIndex+2]
+                let value = x.count >= 4 ? x[x.startIndex+3] : 1
+                memberDec[mk(target,member), default:[:]][decoration] = value
+                if decoration == 35 && x.count >= 4 { offsets[mk(target,member)] = value }
+            }
             default: break
             }
             i += n
@@ -131,6 +143,7 @@ private enum ShaderSPIRVReflection {
         func type(_ id: UInt32, _ depth: Int = 0) -> String {
             if depth > 5 { return "type#\(id)" }
             switch kind[id] {
+            case "bool": return "bool"
             case "int": return "\((z[id] ?? 0) == 0 ? "u" : "i")\(a[id] ?? 32)"
             case "float": return "f\(a[id] ?? 32)"
             case "vector": return "vec\(z[id] ?? 0)<\(type(a[id] ?? 0,depth+1))>"
@@ -154,6 +167,12 @@ private enum ShaderSPIRVReflection {
                 let dir = v.storage == 1 ? "input" : "output"
                 if v.storage == 1 { ins += 1 } else { outs += 1 }
                 out.append("interface_\(dir)|key=\(key)|name=\(name)|location=\(d[30].map{String($0)} ?? "na")|builtin=\(d[11].map{"builtin#\($0)"} ?? "none")|type=\(type(pointee))")
+                if kind[pointee] == "struct" {
+                    for (j, mt) in (members[pointee] ?? []).enumerated().prefix(32) {
+                        let memberKey = mk(pointee, UInt32(j)), md = memberDec[memberKey] ?? [:]
+                        out.append("interface_\(dir)_member|key=\(key)|variable=\(name)|member=\(safe(memberNames[memberKey] ?? "member\(j)"))|location=\(md[30].map{String($0)} ?? "na")|builtin=\(md[11].map{"builtin#\($0)"} ?? "none")|type=\(type(mt))")
+                    }
+                }
             }
             if let binding = d[33] {
                 descs += 1
@@ -163,8 +182,8 @@ private enum ShaderSPIRVReflection {
                 buffers += 1
                 out.append("spirv_buffer_layout|key=\(key)|name=\(name)|binding=\(d[33].map{String($0)} ?? "na")|members=\(members[pointee]?.count ?? 0)")
                 for (j, mt) in (members[pointee] ?? []).enumerated().prefix(32) {
-                    let ix = UInt32(j), k = mk(pointee,ix)
-                    out.append("spirv_buffer_member|key=\(key)|buffer=\(name)|member=\(safe(memberNames[k] ?? "member\(j)"))|index=\(j)|offset=\(offsets[k].map{String($0)} ?? "na")|type=\(type(mt))")
+                    let ix = UInt32(j), k = mk(pointee,ix), md = memberDec[k] ?? [:]
+                    out.append("spirv_buffer_member|key=\(key)|buffer=\(name)|member=\(safe(memberNames[k] ?? "member\(j)"))|index=\(j)|offset=\(offsets[k].map{String($0)} ?? "na")|matrix_stride=\(md[7].map{String($0)} ?? "na")|array_stride=\(arrayStrides[mt].map{String($0)} ?? "na")|type=\(type(mt))")
                 }
             }
         }
