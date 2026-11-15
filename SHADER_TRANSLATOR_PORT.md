@@ -394,7 +394,7 @@ The NVN reference documents control +0x700 as the c1 offset in the code area and
 - +0x700 is at or before +0x704.
 - +0x704 exactly equals the wrapper's code-area length.
 - +0x708 is 0x30 in all 64 samples. This matches the observed NVN code-header size, but the field's own semantics remain unconfirmed.
-- The c1 tail is the code-area range [c1 offset, code size): 40 samples have no c1 tail; 24 have a 0x100-byte c1 tail.
+- The c1 tail is the code-area range [c1 offset, code size): 42 samples have no c1 tail; 22 have a 0x100-byte c1 tail.
 
 This resolves the previous uncertainty about c1 for the sample corpus. The translator's input should be the 0x50-byte SPH plus instruction bytes, extracted from code-area offset 0x30 up to (but not including) the c1 offset; c1 is supplied separately. Do not include the leading 0x30-byte NVN header or append c1 to the instruction stream.
 
