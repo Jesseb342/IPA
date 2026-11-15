@@ -184,7 +184,7 @@ enum UnityShaderSourceScanner {
             throw ScanError.invalidImage("The NVN split manifest is too large.")
         }
 
-        var archive = Data("NVNSPL1\\0".utf8)
+        var archive = Data("NVNSPL1\0".utf8)
         func appendLE32(_ value: UInt32) {
             archive.append(UInt8(value & 0xff))
             archive.append(UInt8((value >> 8) & 0xff))
