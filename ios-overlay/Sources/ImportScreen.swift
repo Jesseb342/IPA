@@ -1874,7 +1874,7 @@ private struct ImportScreenView: View {
             shaderSampleExportURL = url
             showingShaderSampleShare = true
         } catch {
-            shaderSourceScanLog += "\\nnvn_split_failed|\\(error.localizedDescription)\\n"
+            shaderSourceScanLog += "\nnvn_split_failed|\(error.localizedDescription)\n"
         }
     }
 
