@@ -548,7 +548,7 @@ jobs:
           zip -qry nxnative-shell-build-input.zip Payload
           rm -rf Payload
           unzip -t nxnative-shell-build-input.zip >/dev/null
-          echo "Embedded and signed the LibHac, Capstone, and Ryujinx translator frameworks."
+          echo "Embedded and signed the LibHac, Capstone, SPIRV-Cross, and Ryujinx translator frameworks."
           ls -lh "$FRAMEWORK/NxNativeMetadataProbe" "$TRANSLATOR_FRAMEWORK/NxNativeShaderTranslator"
 
       - name: Package shell as an IPA for sideload testing
@@ -629,13 +629,15 @@ jobs:
           }
           nm -gU "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator" | grep -q '_nxn_translate_shader_jobs'
           nm -gU "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator" | grep -q '_nxn_shader_translator_probe'
-          if find "$APP/Frameworks" -mindepth 1 -maxdepth 1 ! -name 'NxNativeMetadataProbe.framework' ! -name 'NxNativeArm64.framework' ! -name 'NxNativeShaderTranslator.framework' | grep -q .; then
+          if find "$APP/Frameworks" -mindepth 1 -maxdepth 1 ! -name 'NxNativeMetadataProbe.framework' ! -name 'NxNativeArm64.framework' ! -name 'NxNativeShaderTranslator.framework' ! -name 'NxNativeSPIRVCross.framework' | grep -q .; then
             echo "::error::Unexpected framework or game module found in the shell."
             exit 1
           fi
           codesign --verify --deep --strict "$APP"
           echo "Shell metadata:"
           cat "$APP/dm/shell_info.txt"
+          echo "Embedded SPIRV-Cross framework:"
+          file "$APP/Frameworks/NxNativeSPIRVCross.framework/NxNativeSPIRVCross"
           echo "Embedded translator framework:"
           file "$APP/Frameworks/NxNativeShaderTranslator.framework/NxNativeShaderTranslator"
           echo "Shell file count: $(find "$APP" -type f | wc -l | tr -d ' ')"
