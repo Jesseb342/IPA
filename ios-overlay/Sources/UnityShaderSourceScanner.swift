@@ -142,14 +142,15 @@ enum UnityShaderSourceScanner {
             // 0x30-byte code header, 0x50-byte SPH, instructions, then optional c1.
             let c1Offset = Int(u32(control, 0x700))
             let declaredCodeSize = Int(u32(control, 0x704))
-            let codeHeaderBytes = Int(u32(control, 0x708))
+            let control708Raw = u32(control, 0x708)
+            let codeHeaderLength = 0x30
             guard declaredCodeSize == codeArea.count,
                   c1Offset >= 0x80, c1Offset <= declaredCodeSize,
-                  codeHeaderBytes == 0x30 else {
+                  control708Raw == 0x30 else {
                 throw ScanError.invalidImage("NVN code/c1 offsets are inconsistent in \(url.lastPathComponent).")
             }
 
-            let codeHeader = codeArea.subdata(in: 0..<0x30)
+            let codeHeader = codeArea.subdata(in: 0..<codeHeaderLength)
             let graphicsProgram = codeArea.subdata(in: 0x30..<c1Offset)
             guard graphicsProgram.count >= 0x50 else {
                 throw ScanError.invalidImage("NVN graphics program is shorter than its 0x50-byte SPH in \(url.lastPathComponent).")
