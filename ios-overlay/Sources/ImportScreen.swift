@@ -1996,8 +1996,26 @@ private struct ImportScreenView: View {
                     translatorExit = error.localizedDescription
                 }
 
-                var passed: [(key: String, instructionBytes: Int, c1Bytes: Int, spvBytes: Int, textures: Int, images: Int, cbufs: Int, sbufs: Int, notes: String)] = []
+                func clean(_ value: String) -> String {
+                    value.replacingOccurrences(of: "|", with: "_")
+                        .replacingOccurrences(of: "\n", with: " ")
+                        .replacingOccurrences(of: "\r", with: " ")
+                }
+                func resourceLines(_ rows: [[String: Any]], label: String, key: String) -> [String] {
+                    rows.prefix(24).enumerated().map { index, row in
+                        let fields = row.keys.sorted().compactMap { field -> String? in
+                            guard let value = row[field] else { return nil }
+                            return "\(field)=\(clean(String(describing: value)))"
+                        }.joined(separator: ",")
+                        return "resource_\(label)|key=\(key)|index=\(index)|\(fields)"
+                    }
+                }
+
+                var passed: [(key: String, instructionBytes: Int, c1Bytes: Int, spvBytes: Int,
+                              textures: Int, images: Int, cbufs: Int, sbufs: Int,
+                              notes: String, details: [String])] = []
                 var failures: [String] = []
+                var metadataCount = 0
                 for sample in survey.samples {
                     let spvURL = survey.outputDirectoryURL.appendingPathComponent(sample.key + ".spv")
                     let reflectionURL = survey.outputDirectoryURL.appendingPathComponent(sample.key + ".res.json")
@@ -2015,13 +2033,39 @@ private struct ImportScreenView: View {
                         failures.append("\(sample.key): SPIR-V valid, but reflection JSON is missing or invalid")
                         continue
                     }
-                    let textures = (reflection["textures"] as? [[String: Any]])?.count ?? 0
-                    let images = (reflection["images"] as? [[String: Any]])?.count ?? 0
-                    let cbufs = (reflection["cbufs"] as? [[String: Any]])?.count ?? 0
-                    let sbufs = (reflection["sbufs"] as? [[String: Any]])?.count ?? 0
+                    let textures = (reflection["textures"] as? [[String: Any]]) ?? []
+                    let images = (reflection["images"] as? [[String: Any]]) ?? []
+                    let cbufs = (reflection["cbufs"] as? [[String: Any]]) ?? []
+                    let sbufs = (reflection["sbufs"] as? [[String: Any]]) ?? []
                     let notes = (reflection["notes"] as? [String]) ?? []
+                    var details: [String] = []
+
+                    let metadataURL = survey.outputDirectoryURL.appendingPathComponent(sample.key + ".meta.json")
+                    if let metadataData = try? Data(contentsOf: metadataURL),
+                       let metadata = try? JSONSerialization.jsonObject(with: metadataData) as? [String: Any] {
+                        metadataCount += 1
+                        let objectIndex = metadata["object_index"].map { String(describing: $0) } ?? "na"
+                        let subprogram = metadata["subprogram_index"].map { String(describing: $0) } ?? "na"
+                        let recordVersion = metadata["record_version"].map { String(describing: $0) } ?? "na"
+                        let programType = metadata["gpu_program_type"].map { String(describing: $0) } ?? "na"
+                        let keywordCount = metadata["keyword_count"].map { String(describing: $0) } ?? "na"
+                        let keywords = ((metadata["keywords"] as? [String]) ?? []).map(clean).joined(separator: ",")
+                        details.append("unity_record|key=\(sample.key)|object_index=\(objectIndex)|subprogram_index=\(subprogram)|record_version=\(recordVersion)|gpu_program_type=\(programType)|keyword_count=\(keywordCount)|keywords=\(keywords.isEmpty ? "none" : keywords)")
+                    } else {
+                        details.append("unity_record|key=\(sample.key)|metadata=missing")
+                    }
+
+                    details += ShaderSPIRVReflection.report(spv, key: sample.key)
+                    details += resourceLines(textures, label: "texture", key: sample.key)
+                    details += resourceLines(images, label: "image", key: sample.key)
+                    details += resourceLines(cbufs, label: "constant_buffer", key: sample.key)
+                    details += resourceLines(sbufs, label: "storage_buffer", key: sample.key)
+                    if !notes.isEmpty {
+                        details.append("translator_notes|key=\(sample.key)|notes=\(clean(notes.joined(separator: "; ")))")
+                    }
                     passed.append((sample.key, sample.instructionBytes, sample.c1Bytes, spv.count,
-                                   textures, images, cbufs, sbufs, notes.joined(separator: "; ")))
+                                   textures.count, images.count, cbufs.count, sbufs.count,
+                                   notes.joined(separator: "; "), details))
                 }
 
                 let ranked = passed.sorted {
@@ -2034,8 +2078,10 @@ private struct ImportScreenView: View {
                 let totalImages = passed.reduce(0) { $0 + $1.images }
                 let totalCBufs = passed.reduce(0) { $0 + $1.cbufs }
                 let totalSBufs = passed.reduce(0) { $0 + $1.sbufs }
-                let topLines = ranked.prefix(8).map {
-                    "candidate|\($0.key)|sass_bytes=\($0.instructionBytes)|c1_bytes=\($0.c1Bytes)|spv_bytes=\($0.spvBytes)|textures=\($0.textures)|images=\($0.images)|cbufs=\($0.cbufs)|sbufs=\($0.sbufs)|notes=\($0.notes.isEmpty ? "none" : $0.notes)"
+                var topLines: [String] = []
+                for item in ranked.prefix(8) {
+                    topLines.append("candidate|\(item.key)|sass_bytes=\(item.instructionBytes)|c1_bytes=\(item.c1Bytes)|spv_bytes=\(item.spvBytes)|textures=\(item.textures)|images=\(item.images)|cbufs=\(item.cbufs)|sbufs=\(item.sbufs)|notes=\(item.notes.isEmpty ? "none" : item.notes)")
+                    topLines.append(contentsOf: item.details.prefix(72))
                 }
                 let failureLines = failures.prefix(12).map { "failure|\($0)" }
                 return ([
@@ -2045,8 +2091,10 @@ private struct ImportScreenView: View {
                     "translated_valid_spirv|\(passed.count)",
                     "failed_or_invalid|\(failures.count)",
                     "resource_totals|textures=\(totalTextures), images=\(totalImages), constant_buffers=\(totalCBufs), storage_buffers=\(totalSBufs)",
+                    "unity_metadata_sidecars|\(metadataCount)/\(survey.samples.count)",
                     "translator_exit|\(translatorExit)",
-                    "ranking|up to 8 shaders sorted by reflected resource count, then instruction size"
+                    "ranking|up to 8 shaders sorted by reflected resource count, then instruction size",
+                    "reflection_scope|SPIR-V input/output locations, built-ins, descriptors, and uniform/storage-buffer member offsets; translator resource records"
                 ] + topLines + failureLines).joined(separator: "\n")
             }.value
             shaderTranslatorLog = result
