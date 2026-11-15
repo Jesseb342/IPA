@@ -161,34 +161,44 @@ enum OnDeviceMetalCompiler {
         guard let reflection else {
             throw CompilerError.fixture("Metal did not return pipeline reflection")
         }
+        guard #available(iOS 16.0, *) else {
+            throw CompilerError.fixture("modern Metal resource reflection requires iOS 16 or later")
+        }
 
         var resourceSummary: [String] = []
         var boundBuffers = 0
         var boundTextures = 0
         var boundSamplers = 0
         var resources = FixtureResources()
-        for argument in reflection.vertexArguments {
-            guard argument.arrayLength == 1 else {
-                throw CompilerError.missingFunction("Unsupported resource array at vertex argument index \(argument.index)")
+        for binding in reflection.vertexBindings where binding.isUsed {
+            guard !binding.isArgument else {
+                throw CompilerError.fixture("argument-buffer resource at vertex binding index \(binding.index) is not supported by this smoke test")
             }
-            switch argument.type {
+            switch binding.type {
             case .buffer:
-                guard argument.index != 30 else {
+                guard let bufferBinding = binding as? MTLBufferBinding else {
+                    throw CompilerError.fixture("Metal did not expose buffer details for binding \(binding.index)")
+                }
+                guard binding.index != 30 else {
                     throw CompilerError.fixture("vertex resource uses reserved attribute buffer slot 30")
                 }
-                let length = max(4096, argument.bufferDataSize)
+                let length = max(4096, bufferBinding.bufferDataSize)
                 guard let buffer = device.makeBuffer(length: length, options: .storageModeShared) else {
                     throw CompilerError.noMetalDevice
                 }
                 memset(buffer.contents(), 0, buffer.length)
-                resourceSummary.append("buffer@\(argument.index):\(length)")
+                resourceSummary.append("buffer@\(binding.index):\(length)")
                 boundBuffers += 1
-                // The encoder is created below; retain the resource until binding.
-                resources.buffers[argument.index] = buffer
+                resources.buffers[binding.index] = buffer
             case .texture:
-                guard argument.textureType == .type2D, argument.arrayLength == 1 else {
-                    throw CompilerError.missingFunction(
-                        "Offscreen fixture currently supports only single 2D textures; argument index \(argument.index), type \(argument.textureType.rawValue), array length \(argument.arrayLength)"
+                guard let textureBinding = binding as? MTLTextureBinding else {
+                    throw CompilerError.fixture("Metal did not expose texture details for binding \(binding.index)")
+                }
+                guard textureBinding.textureType == .type2D,
+                      textureBinding.arrayLength == 1,
+                      !textureBinding.isDepthTexture else {
+                    throw CompilerError.fixture(
+                        "offscreen fixture supports only single non-depth 2D textures; binding \(binding.index), type \(textureBinding.textureType.rawValue), array length \(textureBinding.arrayLength)"
                     )
                 }
                 let textureDescriptor = MTLTextureDescriptor()
@@ -202,7 +212,7 @@ enum OnDeviceMetalCompiler {
                 textureDescriptor.arrayLength = 1
                 textureDescriptor.usage = [.shaderRead]
                 guard let texture = device.makeTexture(descriptor: textureDescriptor) else {
-                    throw CompilerError.missingFunction("Could not allocate placeholder texture at index \(argument.index), type \(argument.textureType.rawValue)")
+                    throw CompilerError.fixture("could not allocate placeholder texture at index \(binding.index)")
                 }
                 let white: [UInt8] = [255, 255, 255, 255]
                 white.withUnsafeBytes { bytes in
@@ -215,8 +225,8 @@ enum OnDeviceMetalCompiler {
                         )
                     }
                 }
-                resources.textures[argument.index] = texture
-                resourceSummary.append("texture@\(argument.index):\(argument.textureType)")
+                resources.textures[binding.index] = texture
+                resourceSummary.append("texture@\(binding.index):\(textureBinding.textureType)")
                 boundTextures += 1
             case .sampler:
                 let samplerDescriptor = MTLSamplerDescriptor()
@@ -225,13 +235,14 @@ enum OnDeviceMetalCompiler {
                 guard let sampler = device.makeSamplerState(descriptor: samplerDescriptor) else {
                     throw CompilerError.noMetalDevice
                 }
-                resources.samplers[argument.index] = sampler
-                resourceSummary.append("sampler@\(argument.index)")
+                resources.samplers[binding.index] = sampler
+                resourceSummary.append("sampler@\(binding.index)")
                 boundSamplers += 1
             default:
-                throw CompilerError.missingFunction("Unsupported reflected vertex resource type \(argument.type.rawValue) at index \(argument.index)")
+                throw CompilerError.fixture("unsupported reflected vertex binding type \(binding.type.rawValue) at index \(binding.index)")
             }
         }
+
 
         let vertexValues: [Float] = [
             -0.8, -0.8, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
