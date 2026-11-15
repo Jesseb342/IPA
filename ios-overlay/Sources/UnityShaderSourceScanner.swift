@@ -102,8 +102,8 @@ enum UnityShaderSourceScanner {
             "format|NVNSPLIT1",
             "scope|validated Unity 2017 NVN graphics program splits",
             "privacy|local samples only; no keys, NSP/XCI/NCA, RomFS, or full serialized objects",
-            "stage|unresolved; wrapper flag is preserved as raw metadata",
-            "translator|not invoked"
+            "stage|decoded from Maxwell SPH CommonWord0; wrapper flag remains raw metadata",
+            "translator|not invoked by split export"
         ]
         var sampleCount = 0
         var sourceBytes = 0
@@ -158,6 +158,44 @@ enum UnityShaderSourceScanner {
             let sph = graphicsProgram.subdata(in: 0..<0x50)
             let instructions = graphicsProgram.subdata(in: 0x50..<graphicsProgram.count)
             let c1 = codeArea.subdata(in: c1Offset..<declaredCodeSize)
+            let sphWord0 = u32(sph, 0)
+            let sphType = sphWord0 & 0x1f
+            let sphVersion = (sphWord0 >> 5) & 0x1f
+            let shaderType = (sphWord0 >> 10) & 0x0f
+            let sassVersion = (sphWord0 >> 17) & 0x0f
+            let stage: String
+            if sphType == 1 && shaderType == 1 {
+                stage = "vertex"
+            } else if sphType == 2 && shaderType == 5 {
+                stage = "pixel"
+            } else {
+                stage = "unresolved"
+            }
+            guard instructions.count >= 32, instructions.count % 32 == 0 else {
+                throw ScanError.invalidImage("SASS v3 instruction area is not a whole number of 32-byte bundles in \(url.lastPathComponent).")
+            }
+            var inputMap: [String] = []
+            var outputMap: [String] = []
+            if stage == "vertex" {
+                for index in 0..<32 {
+                    let inputByte = sph[0x18 + index / 2]
+                    let inputMask = index % 2 == 0 ? inputByte & 0x0f : inputByte >> 4
+                    if inputMask != 0 { inputMap.append("\(index):0x\(String(inputMask, radix: 16))") }
+                    let outputByte = sph[0x36 + index / 2]
+                    let outputMask = index % 2 == 0 ? outputByte & 0x0f : outputByte >> 4
+                    if outputMask != 0 { outputMap.append("\(index):0x\(String(outputMask, radix: 16))") }
+                }
+            } else if stage == "pixel" {
+                for index in 0..<32 {
+                    let packed = sph[0x18 + index]
+                    let components = (0..<4).map { (packed >> ($0 * 2)) & 0x03 }
+                    if components.contains(where: { $0 != 0 }) {
+                        inputMap.append("\(index):" + components.map(String.init).joined(separator: ","))
+                    }
+                }
+            }
+            let pixelTargetMask = stage == "pixel" ? Int(sph[0x48]) : -1
+            let pixelOutputFlags = stage == "pixel" ? u32(sph, 0x4c) : 0
             let base = url.lastPathComponent
             entries.append((base + ".control.bin", control))
             entries.append((base + ".code-header.bin", codeHeader))
@@ -169,7 +207,7 @@ enum UnityShaderSourceScanner {
             }
 
             manifestLines.append(
-                "sample|\(base)|wrapper_flag=\(wrapperFlag)|control_bytes=\(controlLength)|code_area_bytes=\(codeLength)|c1_offset=0x\(String(c1Offset, radix: 16))|c1_bytes=\(c1.count)|code_header_bytes=\(codeHeader.count)|sph_bytes=\(sph.count)|instruction_bytes=\(instructions.count)|control_708_raw=0x\(String(u32(control, 0x708), radix: 16))"
+                "sample|\(base)|wrapper_flag=\(wrapperFlag)|stage=\(stage)|sph_type=\(sphType)|sph_version=\(sphVersion)|shader_type=\(shaderType)|sass_version=\(sassVersion)|mrt=\((sphWord0 >> 14) & 1)|kills_pixels=\((sphWord0 >> 15) & 1)|pixel_target_mask=\(pixelTargetMask < 0 ? "na" : "0x" + String(pixelTargetMask, radix: 16))|pixel_output_flags=0x\(String(pixelOutputFlags, radix: 16))|input_map=\(inputMap.joined(separator: ";"))|output_map=\(outputMap.joined(separator: ";"))|sass_bundles=\(instructions.count / 32)|control_bytes=\(controlLength)|code_area_bytes=\(codeLength)|c1_offset=0x\(String(c1Offset, radix: 16))|c1_bytes=\(c1.count)|code_header_bytes=\(codeHeader.count)|sph_bytes=\(sph.count)|instruction_bytes=\(instructions.count)|control_708_raw=0x\(String(u32(control, 0x708), radix: 16))"
             )
             sampleCount += 1
             sourceBytes += data.count
@@ -209,6 +247,90 @@ enum UnityShaderSourceScanner {
         let exportURL = preparedDirectory.appendingPathComponent("UnityShaderNVNSplits.nvnsplit")
         try archive.write(to: exportURL, options: .atomic)
         return exportURL
+    }
+
+
+    /// Creates a one-shader diagnostic job for the smallest Cuphead vertex sample
+    /// with no c1 tail. The translator receives the 0x50-byte SPH plus SASS bytes,
+    /// exactly as its Maxwell job contract requires. Attribute/resource answers are
+    /// deliberately left at the translator's documented defaults for this first probe.
+    static func makeNVNVertexProbeJob(preparedDirectory: URL) throws -> (jobFileURL: URL, outputDirectoryURL: URL, sourceName: String, instructionBytes: Int) {
+        let root = preparedDirectory.appendingPathComponent("ShaderSources", isDirectory: true)
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: root.path) else {
+            throw ScanError.invalidImage("No local shader samples were found. Run the shader inspection first.")
+        }
+        let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
+        var candidates: [URL] = []
+        while let url = enumerator?.nextObject() as? URL {
+            if url.pathExtension.lowercased() == "bin" &&
+               url.deletingLastPathComponent().lastPathComponent == "ProgramCode" {
+                candidates.append(url)
+            }
+        }
+        candidates.sort { $0.path < $1.path }
+
+        var matches: [(url: URL, program: Data, instructionBytes: Int)] = []
+        for url in candidates {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true else { continue }
+            let size = values.fileSize ?? 0
+            guard size >= 16 + 0x850 + 0x80, size <= 8 * 1024 * 1024 else { continue }
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            guard data.count == size else { continue }
+
+            let controlLength = Int(u32(data, 8))
+            guard u32(data, 4) == 0, controlLength == 0x850,
+                  controlLength <= data.count - 16 else { continue }
+            let codeStart = 16 + controlLength
+            let control = data.subdata(in: 16..<codeStart)
+            let codeArea = data.subdata(in: codeStart..<data.count)
+            guard u32(control, 0) == 0x98761234,
+                  u32(control, 0x20) == UInt32(controlLength),
+                  u32(codeArea, 0) == 0x12345678 else { continue }
+
+            let declaredCodeSize = Int(u32(control, 0x704))
+            let c1Offset = Int(u32(control, 0x700))
+            guard declaredCodeSize == codeArea.count,
+                  c1Offset == declaredCodeSize,
+                  c1Offset >= 0x80 else { continue }
+
+            let sphWord0 = u32(codeArea, 0x30)
+            let sphType = sphWord0 & 0x1f
+            let shaderType = (sphWord0 >> 10) & 0x0f
+            guard sphType == 1, shaderType == 1 else { continue }
+            let instructionBytes = c1Offset - 0x80
+            guard instructionBytes >= 32, instructionBytes % 32 == 0 else { continue }
+            let program = codeArea.subdata(in: 0x30..<c1Offset)
+            matches.append((url, program, instructionBytes))
+        }
+
+        matches.sort {
+            if $0.instructionBytes != $1.instructionBytes {
+                return $0.instructionBytes < $1.instructionBytes
+            }
+            return $0.url.path < $1.url.path
+        }
+        guard let selected = matches.first else {
+            throw ScanError.invalidImage("No bounded vertex shader with an empty c1 tail and complete SASS bundles was found.")
+        }
+
+        let outputDirectory = preparedDirectory.deletingLastPathComponent()
+            .appendingPathComponent("ShaderTranslatorProbe", isDirectory: true)
+        try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        let codeURL = outputDirectory.appendingPathComponent("cuphead_vertex_probe.bin")
+        try selected.program.write(to: codeURL, options: .atomic)
+
+        let job: [String: Any] = [
+            "key": "cuphead_vertex_probe",
+            "stage": "vs",
+            "code": codeURL.path,
+            "debug": false
+        ]
+        let jobData = try JSONSerialization.data(withJSONObject: [job], options: [.prettyPrinted, .sortedKeys])
+        let jobURL = outputDirectory.appendingPathComponent("jobs.json")
+        try jobData.write(to: jobURL, options: .atomic)
+        return (jobURL, outputDirectory, selected.url.lastPathComponent, selected.instructionBytes)
     }
 
     private struct Entry {
