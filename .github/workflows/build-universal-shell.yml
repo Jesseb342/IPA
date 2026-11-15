@@ -323,6 +323,7 @@ jobs:
           grep -q 'Survey all Cuphead vertex shaders' dm/ios/Sources/ImportScreen.swift
           grep -q 'ShaderTranslatorBridge.probe()' dm/ios/Sources/ImportScreen.swift
           grep -q 'makeNVNVertexSurveyJobs(preparedDirectory:' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q '"c1": c1.map' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'sassVersion == 3' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'ShaderTranslatorBridge.translate(' dm/ios/Sources/ImportScreen.swift
           grep -q 'translated_valid_spirv' dm/ios/Sources/ImportScreen.swift
