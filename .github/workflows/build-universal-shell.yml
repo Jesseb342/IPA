@@ -272,7 +272,7 @@ jobs:
           BUILD="$RUNNER_TEMP/spirv-cross-ios"
           FRAMEWORK="$RUNNER_TEMP/NxNativeSPIRVCross.framework"
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-          git clone --depth 1 --branch vulkan-sdk-1.3.296.0 https://github.com/KhronosGroup/SPIRV-Cross.git "$SRC"
+          git clone --depth 1 --recurse-submodules --shallow-submodules --branch vulkan-sdk-1.3.296.0 https://github.com/KhronosGroup/SPIRV-Cross.git "$SRC"
           cmake -S "$SRC" -B "$BUILD" -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_SYSTEM_PROCESSOR=arm64 \
