@@ -487,7 +487,26 @@ For this first diagnostic only, resource answers are intentionally left at the t
 3. Tap **Translate one Cuphead vertex shader**.
 4. Share the resulting translation report. If translation succeeds, inspect its reflection and notes before attempting pixel shaders or a Metal pipeline.
 
-The next engineering task after that test is to compare the translator's reflected constant buffers, textures, images, and vertex inputs with Unity's serialized ShaderProgram/pass/variant metadata. Do not assume the fallback answers are game-correct. No successful Cuphead shader translation, Metal shader compilation, or Cuphead rendering is claimed until the on-device report demonstrates it.
+### First real Cuphead vertex translation — 2026-11-15
+
+The first on-device report confirms:
+
+- Sample: `data-resources-assets-shader-object-151-p19-c0-s14-t26-len2656.bin`
+- Stage: vertex, decoded from SPH
+- SASS: 384 instruction bytes / 12 bundles
+- Output: 1,940-byte SPIR-V module with valid magic
+- Translator notes: none
+- Reflected textures, images, constant buffers, and storage buffers: zero in each category
+
+This is the first confirmed Cuphead program translated through the embedded Ryujinx path. It is a small shader with no reflected descriptor resources in those four categories. That does not establish that it has no vertex inputs/outputs, and the current resource report does not include an attribute inventory. The result also does not validate semantic correctness, Metal compilation, or game rendering.
+
+### Next diagnostic: survey all vertex programs
+
+The on-device action has been expanded from one smallest-sample probe to a batch survey of all bounded SPH-version-3 / SASS-version-3 Cuphead vertex samples. It preserves each sample's c1 tail and passes it through the job's `c1` field, rather than excluding non-empty c1 cases. For each job, the app validates SPIR-V output, reads the resource reflection, records translator errors, and ranks successful shaders by reflected resource count and instruction size. This should identify more representative vertex programs and show whether the first sample's empty reflection was simply a property of that small shader.
+
+The survey remains a diagnostic: absent `attr` answers still use the translator's float default, and texture/image type answers remain defaults unless inferred by the translator from instructions. The next step after the batch report is to select a resource-bearing shader (if one exists), then reconcile its resource and interface requirements with Unity's serialized ShaderProgram/pass/variant metadata.
+
+No successful Cuphead shader rendering is claimed.
 
 ### References
 
