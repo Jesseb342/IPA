@@ -1233,6 +1233,12 @@ private struct ImportScreenView: View {
         baseVerified && keys != nil && (updateVerified || noUpdateSelected) && dlcSelectionFinished
     }
 
+    private var cupheadObject138SPIRVAvailable: Bool {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let file = documents.appendingPathComponent("ShaderTranslatorVertexSurvey/data-resources-assets-shader-object-138-p19-c0-s12-t26-len3936.spv")
+        return FileManager.default.fileExists(atPath: file.path)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -1517,7 +1523,12 @@ private struct ImportScreenView: View {
                                 .padding(.vertical, 12)
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(testingCupheadMetalShader || testingShaderTranslator || extracting || rewritingModules)
+                        .disabled(!cupheadObject138SPIRVAvailable || testingCupheadMetalShader || testingShaderTranslator || extracting || rewritingModules)
+                        if !cupheadObject138SPIRVAvailable {
+                            Text("Run Inspect Unity Shader Objects and Survey all Cuphead vertex shaders first.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     if testingCupheadMetalShader {
                         HStack(spacing: 10) {
