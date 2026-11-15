@@ -399,6 +399,9 @@ jobs:
           swiftc -frontend -parse dm/ios/Sources/ImportScreen.swift
           grep -q 'makeLibrary(source: source, options: options)' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'Convert object 138 to MSL + Metal' dm/ios/Sources/ImportScreen.swift
+          grep -q 'Convert object 141 / subprogram 8 to MSL + Metal' dm/ios/Sources/ImportScreen.swift
+          grep -q 'cupheadShaderSPIRVKey(objectIndex: 141, subprogramIndex: 8)' dm/ios/Sources/ImportScreen.swift
+          grep -q 'expected=storage-buffer' dm/ios/Sources/ImportScreen.swift
           grep -q 'SPIRVCrossBridge.convert(input:' dm/ios/Sources/ImportScreen.swift
           grep -q 'no render pipeline or game rendering tested' dm/ios/Sources/ImportScreen.swift
           echo "IPA import UI overlay applied."
@@ -584,7 +587,7 @@ jobs:
 
           binary = pathlib.Path(sys.argv[1])
           data = binary.read_bytes()
-          required = (b"ImportScreenView", b"_dm_show_import_screen", b"Inspect Unity Shader Objects", b"Survey all Cuphead vertex shaders", b"Convert object 138 to MSL + Metal", b"SPIRVCrossBridge", b"translated_valid_spirv", b"spirv_buffer_member", b"unity_metadata_sidecars", b"spirv_reflection", b"NxNativeSPIRVCross.framework", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso", b"nxn_arm64_inspect_function", b"nxn_arm64_discover_linker_stubs")
+          required = (b"ImportScreenView", b"_dm_show_import_screen", b"Inspect Unity Shader Objects", b"Survey all Cuphead vertex shaders", b"Convert object 138 to MSL + Metal", b"Convert object 141 / subprogram 8 to MSL + Metal", b"SPIRVCrossBridge", b"translated_valid_spirv", b"spirv_buffer_member", b"unity_metadata_sidecars", b"spirv_reflection", b"NxNativeSPIRVCross.framework", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso", b"nxn_arm64_inspect_function", b"nxn_arm64_discover_linker_stubs")
           missing = [item.decode() for item in required if item not in data]
           if missing:
               print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
