@@ -323,6 +323,11 @@ enum UnityShaderSourceScanner {
             let key = url.deletingPathExtension().lastPathComponent
             let codeURL = outputDirectory.appendingPathComponent(key + ".bin")
             try program.write(to: codeURL, options: .atomic)
+            let sourceMetadataURL = url.appendingPathExtension("meta.json")
+            if manager.fileExists(atPath: sourceMetadataURL.path) {
+                let destinationMetadataURL = outputDirectory.appendingPathComponent(key + ".meta.json")
+                try? manager.copyItem(at: sourceMetadataURL, to: destinationMetadataURL)
+            }
             let job: [String: Any] = [
                 "key": key,
                 "stage": "vs",
