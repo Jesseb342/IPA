@@ -294,6 +294,7 @@ enum UnityShaderSourceScanner {
             let codeArea = data.subdata(in: codeStart..<data.count)
             guard u32(control, 0) == 0x98761234,
                   u32(control, 0x20) == UInt32(controlLength),
+                  u32(control, 0x708) == 0x30,
                   u32(codeArea, 0) == 0x12345678 else { continue }
 
             let declaredCodeSize = Int(u32(control, 0x704))
