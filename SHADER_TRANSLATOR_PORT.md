@@ -369,30 +369,55 @@ The next investigation should move from scanning more records to decoding the in
 **Verification status:** fresh on-device scan; 65/65 chunks and 5,698/5,698 records parsed. Shader translation and Cuphead rendering remain unverified.
 
 
-## On-device raw sample analysis — 2026-11-15
 
-The uploaded `UnityShaderSamples.nxsamples` archive was parsed locally. Its `NXSAMP1` container is internally consistent: the manifest declares 64 samples / 240,640 payload bytes, and all 64 entry headers, UTF-8 names, payload lengths, and end offsets validate exactly. The archive contains 58 unique payloads and six exact duplicate pairs (SHA-256 grouping).
+## On-device raw sample analysis and NVN split — 2026-11-15
 
-### Confirmed per-payload structure
+The uploaded `UnityShaderSamples.nxsamples` archive was parsed locally. Its `NXSAMP1` container is internally consistent: 64 sample entries / 240,640 payload bytes; all entry names, lengths, and final offsets validate. The archive contains 58 unique payloads and six exact duplicate pairs.
 
-All 64 samples share this 16-byte little-endian wrapper:
+### Unity wrapper and NVN code-area structure
 
-- +0x00: a 32-bit value of 0 or 1 (28 and 36 samples respectively; semantics not yet identified).
-- +0x04: zero.
-- +0x08: control-section length, always 0x850 (2,128 bytes).
-- +0x0C: code-area length, variable (0x100 through 0x2200 in the sample set).
+All 64 records use the same bounded outer layout:
 
-The control section begins at +0x10, has magic `0x98761234`, and stores its own length `0x850` at control-relative +0x20. The code area immediately follows the control section, begins with magic `0x12345678`, and its declared length exactly reaches the end of every sample. All 64 records therefore pass the same strict bounds checks.
+- +0x00: wrapper flag, observed values 0 and 1 (semantics unresolved).
+- +0x04: reserved zero.
+- +0x08: control-section length, always 0x850.
+- +0x0C: code-area length; control and code areas exactly account for the complete record after the 16-byte wrapper.
 
-The code-area layout matches the documented NVN graphics layout: a 0x30-byte header with magic `0x12345678`, followed by a 0x50-byte SPH, with instruction bytes beginning at code-relative +0x80. All 64 samples have the graphics magic; none has the documented compute magic `0x12345679`. This positively identifies the extracted records as structured Nintendo Switch NVN graphics-program payloads, rather than an unknown generic binary or a direct SPIR-V blob.
+The control section starts with magic `0x98761234`; its declared length at control-relative +0x20 is 0x850. The code area starts with graphics magic `0x12345678` in all 64 samples. Its 0x30-byte NVN header is followed by a 0x50-byte Maxwell SPH, with instructions beginning at code-area offset 0x80.
 
-### Important unresolved control-field difference
+### Correct interpretation of the control offsets
 
-In these samples, control-relative +0x700 is `0x850`, +0x704 is zero, and +0x708 is `code_area_length - 0x70`. The newer NVN reference describes +0x700/+0x704 differently for another title/layout. Do not copy those field meanings into the Cuphead parser without resolving this Unity 2017-era variation. The wrapper's first 32-bit field (0/1) is also still unclassified and must not yet be treated as a vertex/fragment stage flag.
+The previous note that treated control +0x700 as a constant and +0x708 as a computed length was incorrect; this section supersedes that interpretation.
 
-### Translator implications and next step
+The NVN reference documents control +0x700 as the c1 offset in the code area and +0x704 as code size. In the uploaded Cuphead samples:
 
-The existing `SwshXlate.cs` job contract expects graphics input as the 0x50-byte SPH plus instruction bytes, not the leading 0x30-byte NVN code-area header. A first controlled parser can therefore validate and strip that 0x30-byte header, but it must also extract or establish the correct control-section/c1 data, stage identity, and resource metadata before invoking the translator. The translator's current comments identify c1 as necessary for resolving indirect BRX jump targets; do not silently substitute an empty c1 buffer.
+- +0x700 is at or before +0x704.
+- +0x704 exactly equals the wrapper's code-area length.
+- +0x708 is 0x30 in all 64 samples. This matches the observed NVN code-header size, but the field's own semantics remain unconfirmed.
+- The c1 tail is the code-area range [c1 offset, code size): 40 samples have no c1 tail; 24 have a 0x100-byte c1 tail.
 
-Next: implement a read-only validator/splitter for this 16-byte wrapper, the 0x850 control section, and the NVN graphics code area; record the unresolved wrapper/control fields; then determine c1 and stage metadata from the control/SPH structures. Only after those checks should one sample be passed through the on-device translator and compared with a known-good upstream output. This archive does not yet prove a shader has translated successfully or that Cuphead renders.
+This resolves the previous uncertainty about c1 for the sample corpus. The translator's input should be the 0x50-byte SPH plus instruction bytes, extracted from code-area offset 0x30 up to (but not including) the c1 offset; c1 is supplied separately. Do not include the leading 0x30-byte NVN header or append c1 to the instruction stream.
 
+Reference: [NX Native shader layout notes](https://nx-native.com/docs/reference/shaders), which describe the graphics code-area header/SPH arrangement and the control +0x700/+0x704 fields. The observed Cuphead values have been checked directly against the uploaded sample bytes; the reference does not establish the meaning of Cuphead's wrapper flag or control +0x708 field.
+
+### On-device implementation added
+
+The app now has a **Validate & split NVN graphics** action. It reads only the already extracted local `ProgramCode` samples, validates the wrapper bounds, control magic/declared length, graphics code magic, 0x30-byte header, SPH minimum size, c1 offset, and code-size equality. It then creates a user-shareable `UnityShaderNVNSplits.nvnsplit` archive containing, per sample:
+
+- the complete 0x850-byte control section;
+- the 0x30-byte NVN code header;
+- the SPH-plus-instructions translator input;
+- the SPH and instruction bytes separately for inspection;
+- a separate c1 file when the sample has a non-empty c1 tail.
+
+The manifest preserves the wrapper flag and raw +0x708 value without assigning unverified meanings. The splitter does not invoke the translator, guess shader stage, or synthesize resource metadata. All inputs remain in the iPhone app sandbox until the user explicitly shares the generated archive.
+
+### Next validation
+
+1. Build and install the updated shell.
+2. Run **Inspect Unity Shader Objects** on the extracted Cuphead game.
+3. Run **Validate & split NVN graphics** and share the resulting `.nvnsplit` archive for independent validation.
+4. Confirm the split archive reports the expected 64/64 bounded samples and c1 distribution.
+5. Then resolve stage identity and resource metadata from Unity's surrounding serialized ShaderProgram/pass/variant structures before creating a real translator job.
+
+No shader translation, SPIR-V output, Metal compilation, or Cuphead rendering has yet been demonstrated.
