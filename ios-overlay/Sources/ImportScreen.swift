@@ -1304,7 +1304,7 @@ private struct ImportScreenView: View {
                     Button {
                         Task { await testShaderTranslator() }
                     } label: {
-                        Label("Test Shader Translator", systemImage: "square.stack.3d.up")
+                        Label("Translate one Cuphead vertex shader", systemImage: "square.stack.3d.up")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                     }
@@ -1378,7 +1378,7 @@ private struct ImportScreenView: View {
                     if testingShaderTranslator {
                         HStack(spacing: 10) {
                             ProgressView()
-                            Text("Loading the on-device shader translator…")
+                            Text("Translating a Cuphead vertex shader on this iPhone…")
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -1883,17 +1883,55 @@ private struct ImportScreenView: View {
         shaderTranslatorLog = ""
         defer { testingShaderTranslator = false }
 
+        let prepared = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PreparedGame", isDirectory: true)
         do {
             let result = try await Task.detached(priority: .userInitiated) {
                 try ShaderTranslatorBridge.probe()
-                return "success|The Ryujinx shader translator loaded on this iPhone and passed its native probe.\\nnext|Ready for the first real Cuphead shader translation test."
+                let probe = try UnityShaderSourceScanner.makeNVNVertexProbeJob(preparedDirectory: prepared)
+                try ShaderTranslatorBridge.translate(
+                    jobFileURL: probe.jobFileURL,
+                    outputDirectoryURL: probe.outputDirectoryURL
+                )
+
+                let spvURL = probe.outputDirectoryURL.appendingPathComponent("cuphead_vertex_probe.spv")
+                let reflectionURL = probe.outputDirectoryURL.appendingPathComponent("cuphead_vertex_probe.res.json")
+                let spv = try Data(contentsOf: spvURL)
+                guard spv.count >= 20, Array(spv.prefix(4)) == [0x03, 0x02, 0x23, 0x07] else {
+                    throw NSError(domain: "CupheadShaderProbe", code: 1, userInfo: [
+                        NSLocalizedDescriptionKey: "The translator returned no valid SPIR-V module."
+                    ])
+                }
+                let reflectionData = try Data(contentsOf: reflectionURL)
+                guard let reflection = try JSONSerialization.jsonObject(with: reflectionData) as? [String: Any] else {
+                    throw NSError(domain: "CupheadShaderProbe", code: 2, userInfo: [
+                        NSLocalizedDescriptionKey: "The translator reflection report was not valid JSON."
+                    ])
+                }
+                let textures = (reflection["textures"] as? [[String: Any]])?.count ?? 0
+                let images = (reflection["images"] as? [[String: Any]])?.count ?? 0
+                let constantBuffers = (reflection["cbufs"] as? [[String: Any]])?.count ?? 0
+                let storageBuffers = (reflection["sbufs"] as? [[String: Any]])?.count ?? 0
+                let notes = (reflection["notes"] as? [String]) ?? []
+                return """
+                translation|passed
+                sample|\(probe.sourceName)
+                stage|vertex (decoded from SPH)
+                sass_instruction_bytes|\(probe.instructionBytes)
+                sass_bundles|\(probe.instructionBytes / 32)
+                spirv_bytes|\(spv.count)
+                spirv_magic|valid
+                reflection|textures=\(textures), images=\(images), constant_buffers=\(constantBuffers), storage_buffers=\(storageBuffers)
+                translator_notes|\(notes.isEmpty ? "none" : notes.joined(separator: "; "))
+                defaults|unresolved vertex attribute types=float; unresolved texture types=2D; unresolved image formats=RGBA8 UNORM
+                meaning|This proves one Cuphead vertex sample passed through Ryujinx to SPIR-V. It does not yet prove correct resource typing, Metal compilation, or game rendering.
+                """
             }.value
             shaderTranslatorLog = result
         } catch {
-            shaderTranslatorLog = "failed|The shader translator could not initialize: \\(error.localizedDescription)"
+            shaderTranslatorLog = "translation_failed|\(error.localizedDescription)"
         }
     }
-
     private func testOnDeviceMetalCompiler() async {
         testingMetalCompiler = true
         metalCompilerLog = ""
