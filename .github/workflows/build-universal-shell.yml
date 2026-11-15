@@ -286,6 +286,12 @@ jobs:
           grep -q 'duplicate_payload_records=' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'fnv1a64=' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'local_only=true' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'sample_selection=one_per_code_length_class' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'duplicate_pair_saved=' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'makeSampleExport(preparedDirectory:' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'NXSAMP1' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'Export raw shader samples' dm/ios/Sources/ImportScreen.swift
+          grep -q 'ShaderSampleActivityView' dm/ios/Sources/ImportScreen.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
