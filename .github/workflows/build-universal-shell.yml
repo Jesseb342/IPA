@@ -327,6 +327,11 @@ jobs:
           grep -q 'sassVersion == 3' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'ShaderTranslatorBridge.translate(' dm/ios/Sources/ImportScreen.swift
           grep -q 'translated_valid_spirv' dm/ios/Sources/ImportScreen.swift
+          grep -q 'private enum ShaderSPIRVReflection' dm/ios/Sources/ImportScreen.swift
+          grep -q 'spirv_buffer_member' dm/ios/Sources/ImportScreen.swift
+          grep -q 'unity_metadata_sidecars' dm/ios/Sources/ImportScreen.swift
+          grep -q 'sourceMetadataURL = url.appendingPathExtension("meta.json")' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'keyword_count' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'ShaderTranslatorVertexSurvey' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'File.WriteAllText' ipa-overlay/translator-probe/SwshXlate.cs
           swiftc -frontend -parse dm/ios/Sources/ImportScreen.swift
