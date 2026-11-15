@@ -171,6 +171,9 @@ enum UnityShaderSourceScanner {
             } else {
                 stage = "unresolved"
             }
+            guard stage != "unresolved", sphVersion == 3, sassVersion == 3 else {
+                throw ScanError.invalidImage("Unsupported NVIDIA SPH type, shader stage, or SASS version in \\(url.lastPathComponent).")
+            }
             guard instructions.count >= 32, instructions.count % 32 == 0 else {
                 throw ScanError.invalidImage("SASS v3 instruction area is not a whole number of 32-byte bundles in \(url.lastPathComponent).")
             }
