@@ -190,7 +190,7 @@ enum OnDeviceMetalCompiler {
             case .texture:
                 guard argument.textureType == .type2D, argument.arrayLength == 1 else {
                     throw CompilerError.missingFunction(
-                        "Offscreen fixture currently supports only single 2D textures; argument index \\(argument.index), type \\(argument.textureType.rawValue), array length \\(argument.arrayLength)"
+                        "Offscreen fixture currently supports only single 2D textures; argument index \(argument.index), type \(argument.textureType.rawValue), array length \(argument.arrayLength)"
                     )
                 }
                 let textureDescriptor = MTLTextureDescriptor()
