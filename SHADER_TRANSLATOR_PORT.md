@@ -321,3 +321,27 @@ This is meaningful new evidence: the earlier conclusion based on the first 24 re
 The next useful investigation is to map the repeated header fields and compare representative saved payloads from several length classes. In particular, determine whether the size/count fields describe an internal instruction stream or a nested container, and identify the actual platform-19 / GPU-program-type-26 encoding before attempting translation. The current report still does not establish the bytecode format or contain evidence of a translator invocation or successful translation. Do not feed these payloads to the SPIR-V translator based on these findings alone.
 
 **Verification status:** this B proves that a v11 scanner executed on-device and completed the full 5,184-record parse and fingerprint pass. It does not prove shader translation or game rendering.
+
+
+## B report: v11 distributed payload scan — 2026-11-15
+
+The latest on-device report was uploaded in commit [3049381](https://github.com/Jesseb342/IPA/commit/3049381eb147b8cb52690209ea2efbec883d74e8). It is a new scan, not a repeat: scanner revision `unity2017-shader-payload-profile-v11-distributed`, scan ID `61DAC771-C0D4-428E-824A-AA65458F4556`, started at `2026-11-15T13:11:43Z`. The inventory remains 543 files, 286 UnityFS bundles, and 82 direct SerializedFile scans totaling 249,390,016 bytes.
+
+### Build used for this scan
+
+The manual shell workflow completed successfully at [run 43717208277](https://github.com/Jesseb342/IPA/actions/runs/43717208277), built from workflow commit `6e83aa7b98f459136b4e945eeb14e39e5800c969`. All job steps succeeded, including the v11 source-contract gate, Swift parser syntax check, translator NativeAOT build, app packaging, framework signing, IPA packaging, and game-free payload checks. It produced the `nxnative-universal-shell-ipa` artifact (about 25.3 MB). This proves the generic shell built; it is not a shader translation test.
+
+### Parsing and payload findings
+
+- 65 Shader objects have validated platform-19 compressed-blob layouts and successful bounded LZ4 chunk decodes.
+- All 65 decoded chunks parsed: 5,698 subprogram records, 5,698 valid records, 5,698 code records, zero parse failures. Every record is GPU program type 26.
+- Main target `Data/resources.assets` object 142 (5,064,092 bytes): one validated platform-19 blob (3,731,029 bytes), 5,184 parsed code records, and 14 distinct code lengths from 2,912 to 6,240 bytes.
+- v11 fingerprints all 5,184 code payloads in object 142 and reports 2,592 unique FNV-1a hashes plus 2,592 duplicate records. This suggests substantial payload reuse across variants; FNV-1a is non-cryptographic, so treat it as a grouping signal rather than collision-proof identity.
+- Smaller cross-check object 143 (46,656 bytes) also has a validated platform-19 blob (25,654 bytes), one decoded chunk, and all 19 code records parsed without failures. It has nine code lengths and 19 unique sampled fingerprints.
+- Distributed samples still report no tested SPIR-V, DXBC, DXIL, MTLB, SHDR, or NVN signatures. Repeated prefixes and structured little-endian fields are visible, but their meanings and the actual instruction/container encoding remain unidentified.
+
+### Interpretation and next step
+
+This is a real advance over the prior v11 B: object 143 is now a second decoded and parsed reference, and both objects confirm the same 8-byte Unity 2017 program-record layout. The 5,698 records are structurally parsed payload records, not proof that their code bytes are already a translator-compatible format.
+
+Next, compare locally saved payloads from objects 142 and 143 across length families and header fields. Determine which bytes are metadata versus instruction payload, then identify the platform-19 / GPU-type-26 encoding using authoritative format evidence. Do not feed these payloads to the Ryujinx SPIR-V translator until the input format is positively identified. Validate the bridge with a known-good supported shader fixture before attempting Cuphead translation. Game data remains on-device; Actions only builds the generic shell.
