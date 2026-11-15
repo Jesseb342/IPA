@@ -290,6 +290,7 @@ jobs:
           grep -q 'duplicate_pair_saved=' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'makeSampleExport(preparedDirectory:' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'NXSAMP1' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'lastPathComponent == "ProgramCode"' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'Export raw shader samples' dm/ios/Sources/ImportScreen.swift
           grep -q 'ShaderSampleActivityView' dm/ios/Sources/ImportScreen.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
