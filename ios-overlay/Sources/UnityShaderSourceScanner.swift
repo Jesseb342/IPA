@@ -76,6 +76,140 @@ enum UnityShaderSourceScanner {
         return exportURL
     }
 
+
+    /// Validates the Unity 2017 NVN program wrapper and splits each graphics sample
+    /// into the control section, 0x30-byte NVN code header, SPH+instructions, and c1.
+    /// The output remains a local, user-exported diagnostic archive; it is not sent
+    /// to the translator because stage/resource metadata is not yet resolved.
+    static func makeNVNSplitExport(preparedDirectory: URL) throws -> URL {
+        let root = preparedDirectory.appendingPathComponent("ShaderSources", isDirectory: true)
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: root.path) else {
+            throw ScanError.invalidImage("No local shader samples were found. Run the shader inspection first.")
+        }
+        let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
+        var candidates: [URL] = []
+        while let url = enumerator?.nextObject() as? URL {
+            if url.pathExtension.lowercased() == "bin" &&
+               url.deletingLastPathComponent().lastPathComponent == "ProgramCode" {
+                candidates.append(url)
+            }
+        }
+        candidates.sort { $0.path < $1.path }
+
+        var entries: [(name: String, data: Data)] = []
+        var manifestLines = [
+            "format|NVNSPLIT1",
+            "scope|validated Unity 2017 NVN graphics program splits",
+            "privacy|local samples only; no keys, NSP/XCI/NCA, RomFS, or full serialized objects",
+            "stage|unresolved; wrapper flag is preserved as raw metadata",
+            "translator|not invoked"
+        ]
+        var sampleCount = 0
+        var sourceBytes = 0
+        for url in candidates {
+            guard sampleCount < 64 else { break }
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true else { continue }
+            let size = values.fileSize ?? 0
+            guard size >= 16, size <= 8 * 1024 * 1024 - sourceBytes else { continue }
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            guard data.count == size else { continue }
+
+            let wrapperFlag = u32(data, 0)
+            let wrapperReserved = u32(data, 4)
+            let controlLength = Int(u32(data, 8))
+            let codeLength = Int(u32(data, 12))
+            guard wrapperFlag <= 1, wrapperReserved == 0,
+                  controlLength == 0x850,
+                  controlLength <= data.count - 16,
+                  codeLength == data.count - 16 - controlLength,
+                  codeLength >= 0x80 else {
+                throw ScanError.invalidImage("Invalid Unity/NVN wrapper bounds in \(url.lastPathComponent).")
+            }
+
+            let controlStart = 16
+            let codeStart = controlStart + controlLength
+            let control = data.subdata(in: controlStart..<codeStart)
+            let codeArea = data.subdata(in: codeStart..<data.count)
+            guard u32(control, 0) == 0x98761234,
+                  u32(control, 0x20) == UInt32(controlLength),
+                  u32(codeArea, 0) == 0x12345678 else {
+                throw ScanError.invalidImage("Unknown NVN control/code magic or control length in \(url.lastPathComponent).")
+            }
+
+            // The Unity sample corpus uses the NVN1 graphics layout:
+            // 0x30-byte code header, 0x50-byte SPH, instructions, then optional c1.
+            let c1Offset = Int(u32(control, 0x700))
+            let declaredCodeSize = Int(u32(control, 0x704))
+            let codeHeaderBytes = Int(u32(control, 0x708))
+            guard declaredCodeSize == codeArea.count,
+                  c1Offset >= 0x80, c1Offset <= declaredCodeSize,
+                  codeHeaderBytes == 0x30 else {
+                throw ScanError.invalidImage("NVN code/c1 offsets are inconsistent in \(url.lastPathComponent).")
+            }
+
+            let codeHeader = codeArea.subdata(in: 0..<0x30)
+            let graphicsProgram = codeArea.subdata(in: 0x30..<c1Offset)
+            guard graphicsProgram.count >= 0x50 else {
+                throw ScanError.invalidImage("NVN graphics program is shorter than its 0x50-byte SPH in \(url.lastPathComponent).")
+            }
+            let sph = graphicsProgram.subdata(in: 0..<0x50)
+            let instructions = graphicsProgram.subdata(in: 0x50..<graphicsProgram.count)
+            let c1 = codeArea.subdata(in: c1Offset..<declaredCodeSize)
+            let base = url.lastPathComponent
+            entries.append((base + ".control.bin", control))
+            entries.append((base + ".code-header.bin", codeHeader))
+            entries.append((base + ".sph-instructions.bin", graphicsProgram))
+            entries.append((base + ".sph.bin", sph))
+            entries.append((base + ".instructions.bin", instructions))
+            if !c1.isEmpty {
+                entries.append((base + ".c1.bin", c1))
+            }
+
+            manifestLines.append(
+                "sample|\(base)|wrapper_flag=\(wrapperFlag)|control_bytes=\(controlLength)|code_area_bytes=\(codeLength)|c1_offset=0x\(String(c1Offset, radix: 16))|c1_bytes=\(c1.count)|code_header_bytes=\(codeHeaderBytes)|sph_bytes=\(sph.count)|instruction_bytes=\(instructions.count)|control_708_raw=0x\(String(u32(control, 0x708), radix: 16))"
+            )
+            sampleCount += 1
+            sourceBytes += data.count
+        }
+
+        guard sampleCount > 0 else {
+            throw ScanError.invalidImage("No bounded NVN graphics samples were available to split.")
+        }
+        manifestLines.insert("sample_count|\(sampleCount)", at: 0)
+        manifestLines.insert("split_entry_count|\(entries.count)", at: 1)
+        let manifestData = Data((manifestLines.joined(separator: "\n") + "\n").utf8)
+        guard manifestData.count <= Int(UInt32.max) else {
+            throw ScanError.invalidImage("The NVN split manifest is too large.")
+        }
+
+        var archive = Data("NVNSPL1\\0".utf8)
+        func appendLE32(_ value: UInt32) {
+            archive.append(UInt8(value & 0xff))
+            archive.append(UInt8((value >> 8) & 0xff))
+            archive.append(UInt8((value >> 16) & 0xff))
+            archive.append(UInt8((value >> 24) & 0xff))
+        }
+        appendLE32(UInt32(manifestData.count))
+        archive.append(manifestData)
+        for entry in entries {
+            let name = Data(entry.name.utf8)
+            guard name.count <= Int(UInt16.max), entry.data.count <= Int(UInt32.max) else {
+                throw ScanError.invalidImage("An NVN split entry exceeds the archive format limits.")
+            }
+            archive.append(UInt8(name.count & 0xff))
+            archive.append(UInt8((name.count >> 8) & 0xff))
+            appendLE32(UInt32(entry.data.count))
+            archive.append(name)
+            archive.append(entry.data)
+        }
+
+        let exportURL = preparedDirectory.appendingPathComponent("UnityShaderNVNSplits.nvnsplit")
+        try archive.write(to: exportURL, options: .atomic)
+        return exportURL
+    }
+
     private struct Entry {
         let offset: UInt64
         let length: UInt64
