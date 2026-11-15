@@ -448,6 +448,8 @@ Observed values in the 64 Cuphead samples:
 
 This gives **28 vertex and 36 pixel/fragment programs**. The wrapper flag is 0 on all 28 vertex samples and 1 on all 36 pixel samples, but the implementation continues to preserve it as raw metadata rather than treating that correlation as its definition.
 
+The NVIDIA specification page's overview sentence reverses the VTG/PS SphType values shown in its own enum table. The decode follows the table and is independently corroborated by devkitPro/uam's source header, which explicitly defines NvSphType_VTG = 1, NvSphType_PS = 2, NvShaderType_Vertex = 1, and NvShaderType_Pixel = 5.
+
 The stage is now established from the SPH itself. This supersedes the earlier note that stage identity was unresolved.
 
 ### Stage-specific interface fields
