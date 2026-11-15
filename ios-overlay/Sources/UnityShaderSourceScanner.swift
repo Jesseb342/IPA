@@ -197,7 +197,7 @@ enum UnityShaderSourceScanner {
                     }
                 }
             }
-            let pixelTargetMask = stage == "pixel" ? Int(sph[0x48]) : -1
+            let pixelTargetMask = stage == "pixel" ? Int(u32(sph, 0x48)) : -1
             let pixelOutputFlags = stage == "pixel" ? u32(sph, 0x4c) : 0
             let base = url.lastPathComponent
             entries.append((base + ".control.bin", control))
