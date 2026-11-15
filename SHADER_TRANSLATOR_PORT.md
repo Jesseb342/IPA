@@ -554,3 +554,45 @@ The new sidecars are generated during the Unity Shader-object inspection, so the
 Use those records to determine whether the vertex input locations and numeric types can be recovered from the Maxwell SPH/SASS and Unity keyword/pass metadata, and whether the constant-buffer offsets agree with the host layout. Do not silently accept the translator's current float attribute fallback as authoritative. After the vertex interfaces and resource layouts are understood, proceed to SPIR-V-to-MSL and Metal compilation for selected representative shaders; only then expand to pixel shader translation.
 
 **Build status:** source changes are committed, but no Actions build has been dispatched and no new IPA has been built or tested with these diagnostics. The workflow remains manual (workflow_dispatch); commits do not trigger a build. All game files and generated shader data remain on the iPhone.
+
+## C report: expanded vertex reflection results — 2026-11-15
+
+The checked-in C report is commit [28eb071a](https://github.com/Jesseb342/IPA/commit/28eb071aeb986c9a481806ab78f1c286a152afd1). It is a fresh on-device survey: 95/95 Unity metadata sidecars were found, all 95 vertex jobs produced valid SPIR-V, no jobs failed, and the translator exited zero. Aggregate translator reflection is 1 texture, 0 images, 103 constant-buffer entries, and 2 storage-buffer entries.
+
+### Highest-value resource-bearing samples
+
+**Shader object 138, subprogram 12** is the clearest first Metal-conversion target:
+
+- Unity record version 201708220; GPU program type 26; no shader keywords.
+- SPIR-V reflection parsed 2 inputs, 3 outputs, 4 descriptors, and 3 buffer layouts.
+- Inputs are locations 0 and 1, both `vec4<f32>`. User outputs are locations 0 and 1, both `vec4<f32>`; position is a built-in interface block.
+- Descriptors: `support_buffer` at set 0/binding 0; sampled image `vp_t_tcb_8` at set 0/binding 1; `vp_c3` at binding 2; `vp_c1` at binding 3.
+- Translator resource reflection reports one texture (handle 8, type 3) and two constant buffers (slots 1 and 3).
+- The `support_buffer` struct has eight members at offsets 0, 16, 144, 160, 176, 192, 1360, and 1376. The `vp_c3` and `vp_c1` blocks each contain an array of 4096 `vec4<f32>` values with 16-byte array stride.
+
+This is the best first resource mapping fixture, but C does not prove that the host supplies matching buffer contents, texture dimension/sample state, or binding indices.
+
+**Shader object 141, subprograms 8 and 9** expose a storage-buffer case:
+
+- Both report 2 inputs, 4 outputs, 4 descriptors, and 4 buffer layouts. Inputs are locations 0 and 1, both `vec4<f32>`.
+- Both reflect `support_buffer`, `vp_c3`, `vp_c1`, and `vp_s0`; `vp_s0` is a runtime array of `u32` with 4-byte stride.
+- Translator resource reflection reports two constant buffers and one storage buffer (slot 0, binding 1, constant-buffer slot 0, offset 68).
+- Subprogram 8 has no keywords; subprogram 9 has `AUTO_KEY_VALUE`. Their SASS length, SPIR-V size, interfaces, descriptors, and layouts match, and the scanner marks them duplicate. Treat them as a shared-code variant pair, not proof that their Unity variants are interchangeable; retain both keyword records in eventual pipeline mapping.
+
+**Objects 143 and 133, subprogram 2** are larger lighting variants. Both carry `DIRECTIONAL,LIGHTPROBE_SH,VERTEXLIGHT_ON`, have six vertex inputs, and reflect the common support buffer plus `vp_c3` and `vp_c1`. Object 143 reports nine outputs and object 133 eight. Objects 147 and 150 both carry `UNDERLAY_ON` and have five inputs, but their interface locations differ; do not merge them solely because their SASS lengths match.
+
+### Interpretation and next implementation priority
+
+C materially improves our view of the translated shader ABI: it provides concrete locations, SPIR-V types, descriptor bindings, buffer member offsets/strides, and translator-side resource slots. Important limits remain:
+
+- The leading vertex inputs are all reported as `vec4<f32>`, but the translator job still lacks authoritative per-location vertex attribute type answers. This is not proof that Cuphead's vertex buffers are float4 at every location.
+- The `support_buffer` and large `vp_c1`/`vp_c3` arrays are translator-generated interface structures. Their names/layouts must be reconciled with NVN resource metadata and the actual host-side data upload path.
+- `gl_ClipDistance` and `gl_CullDistance` appear in the translated position interface. Check the generated MSL and iOS Metal compiler diagnostics; do not silently discard these built-ins.
+- Successful reflection does not establish correct shader behavior.
+
+Use object 138/subprogram 12 as the first resource-bearing conversion fixture and object 141/subprogram 8 as the storage-buffer fixture. The next implementation should add deterministic SPIRV-Cross conversion to MSL, record the exact version/options/diagnostics, then compile the MSL with the existing Swift Metal compiler endpoint. Preserve SPIR-V and reflection JSON beside the MSL.
+
+Separately, resolve vertex attribute formats from Maxwell vertex-input metadata / Unity vertex declarations and verify host-side descriptor and buffer bindings. Another broad SASS survey is not the next priority: 95/95 is sufficient to proceed to MSL generation and Metal compilation for selected fixtures.
+
+**Verification status:** C is a successful on-device translation/reflection report. It contains no SPIRV-Cross output or Metal compilation result; neither stage is yet verified.
+
