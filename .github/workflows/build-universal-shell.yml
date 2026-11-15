@@ -364,6 +364,9 @@ jobs:
           grep -q 'createFixtureRenderPipeline' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'runFixtureOffscreenDraw' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'MTLRenderPipelineReflection' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'vertexBindings' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'MTLBufferBinding' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'MTLTextureBinding' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'gpu_draw|completed' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'draw_readback|success' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'runFixtureOffscreenDraw' dm/ios/Sources/ImportScreen.swift
