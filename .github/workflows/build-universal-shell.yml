@@ -417,7 +417,7 @@ jobs:
           grep -q 'cupheadShaderSPIRVKey(objectIndex: 141, subprogramIndex: 8)' dm/ios/Sources/ImportScreen.swift
           grep -q 'expected=storage-buffer' dm/ios/Sources/ImportScreen.swift
           grep -q 'SPIRVCrossBridge.convert(input:' dm/ios/Sources/ImportScreen.swift
-          grep -q 'no render pipeline or game rendering tested' dm/ios/Sources/ImportScreen.swift
+          grep -q 'OnDeviceMetalCompiler.runFixtureOffscreenDraw' dm/ios/Sources/ImportScreen.swift
           echo "IPA import UI overlay applied."
 
       # Shader milestone: move from reporting candidate offsets to extracting
