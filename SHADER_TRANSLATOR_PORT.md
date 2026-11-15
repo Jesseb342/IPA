@@ -345,3 +345,25 @@ The manual shell workflow completed successfully at [run 43717208277](https://gi
 This is a real advance over the prior v11 B: object 143 is now a second decoded and parsed reference, and both objects confirm the same 8-byte Unity 2017 program-record layout. The 5,698 records are structurally parsed payload records, not proof that their code bytes are already a translator-compatible format.
 
 Next, compare locally saved payloads from objects 142 and 143 across length families and header fields. Determine which bytes are metadata versus instruction payload, then identify the platform-19 / GPU-type-26 encoding using authoritative format evidence. Do not feed these payloads to the Ryujinx SPIR-V translator until the input format is positively identified. Validate the bridge with a known-good supported shader fixture before attempting Cuphead translation. Game data remains on-device; Actions only builds the generic shell.
+
+
+## B report: v11 distributed scan refresh — 2026-11-15 13:22 UTC
+
+A newer B report is now present (blob SHA `86acb06ad80c7672d93fabb942b88f9b6c288d4e`), with scan ID `8B220F95-E9F7-4613-B2F2-48F72B839C23`, started at `2026-11-15T13:22:03Z`. It uses the same `unity2017-shader-payload-profile-v11-distributed` scanner revision and the same inventory totals: 543 files, 286 UnityFS bundles, and 82 direct SerializedFile scans (249,390,016 bytes). This is a fresh on-device scan, not the prior 13:11 scan.
+
+### What the refreshed B confirms
+
+- 65 platform-19 Shader chunks decoded and parsed successfully: 5,698 subprogram records, 5,698 valid records, 5,698 code records, and zero parse failures. Every parsed record is GPU program type 26, using the validated 8-byte Unity 2017 record layout.
+- Main object `Data/resources.assets` object 142 remains the dominant dataset: 5,184 records in a 3,731,029-byte compressed platform-19 blob. The code lengths span 14 classes from 2,912 to 6,240 bytes. The scanner's full-payload fingerprint pass reports 2,592 unique FNV-1a hashes and 2,592 duplicate records in this object.
+- Object 143 again parses all 19 records without failure; its 19 payload fingerprints are unique within that object. It has nine code-length classes, including a 6,496-byte record.
+- Additional reference object 146 now provides another useful cross-check: 24 records, seven code-length classes (2,656 through 10,080 bytes), and 20 unique fingerprints / four duplicate records.
+- The report contains per-object fingerprint summaries for all 65 parsed chunks. Across those summaries, 5,698 records were profiled; 578 representative payload profiles were emitted, while the full per-object hash accounting reports 2,986 unique hashes and 2,712 duplicate records when summed across objects. These are per-object totals, not a globally deduplicated count across the entire game.
+- The tested literal signatures remain absent from the inspected shader-object samples. The report still does not identify the actual instruction/container format.
+
+### Interpretation and next step
+
+The important new value is breadth: the refreshed scan confirms the same parser behavior across 65 chunks and adds object 146 as a third substantial reference alongside objects 142 and 143. The strong repetition in object 142 and the additional repeats in object 146 suggest payload reuse is common, but keyword metadata and repeated bytecode must still be treated separately. FNV-1a remains a non-cryptographic grouping signal.
+
+The next investigation should move from scanning more records to decoding the internal code-payload structure. Compare representative saved payloads from objects 142, 143, and 146, including the 2,912-byte family and the longer 8,032-/10,080-byte object-146 records. Map the repeated little-endian header fields and locate the boundary between metadata and executable instructions. Identify the platform-19 / GPU-type-26 encoding with authoritative evidence before writing a decoder or connecting it to the translator. No translator invocation or successful shader translation is demonstrated by this B.
+
+**Verification status:** fresh on-device scan; 65/65 chunks and 5,698/5,698 records parsed. Shader translation and Cuphead rendering remain unverified.
