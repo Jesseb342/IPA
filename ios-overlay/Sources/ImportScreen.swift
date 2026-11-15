@@ -2259,8 +2259,8 @@ private struct ImportScreenView: View {
                     } catch {
                         let detail = error.localizedDescription
                             .replacingOccurrences(of: "|", with: "_")
-                            .replacingOccurrences(of: "\\n", with: " ")
-                        return "gpu_draw|failed\\ngpu_draw_error|\\(detail)"
+                            .replacingOccurrences(of: "\n", with: " ")
+                        return "gpu_draw|failed\ngpu_draw_error|\(detail)"
                     }
                 }()
                 let diagnosticText = (try String(contentsOf: diagnostics, encoding: .utf8))
