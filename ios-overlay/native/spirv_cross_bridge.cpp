@@ -1,6 +1,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <cstring>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -29,8 +30,12 @@ extern "C" NXN_EXPORT int nxn_spirv_to_msl_file(
 
     std::ifstream input(input_path, std::ios::binary);
     if (!input) return fail(12, "Could not open SPIR-V input.");
-    std::vector<uint32_t> words((std::istreambuf_iterator<char>(input)), {});
-    if (words.empty() || (words.size() * sizeof(uint32_t)) % 4 != 0 || words[0] != 0x07230203)
+    std::vector<char> bytes((std::istreambuf_iterator<char>(input)), {});
+    if (bytes.size() < 20 || (bytes.size() % sizeof(uint32_t)) != 0)
+        return fail(13, "Input is not a complete SPIR-V module.");
+    std::vector<uint32_t> words(bytes.size() / sizeof(uint32_t));
+    std::memcpy(words.data(), bytes.data(), bytes.size());
+    if (words[0] != 0x07230203)
         return fail(13, "Input is not a valid little-endian SPIR-V module.");
 
     spvc_parsed_ir ir = nullptr;
