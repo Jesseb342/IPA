@@ -2301,7 +2301,7 @@ private struct ImportScreenView: View {
                     $0.hasPrefix("spirv_buffer_member|")
                 }
                 report.append(contentsOf: structural.prefix(48))
-                report.append("scope|vertex library compilation only; no render pipeline or game rendering tested")
+                report.append("scope|Metal library and render-pipeline state created; no vertex buffers bound, no draw submitted, no game rendering tested")
                 return report.joined(separator: "\n")
             }.value
             cupheadMetalShaderLog = result
