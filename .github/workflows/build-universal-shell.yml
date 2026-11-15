@@ -291,6 +291,13 @@ jobs:
           grep -q 'makeSampleExport(preparedDirectory:' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'NXSAMP1' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'lastPathComponent == "ProgramCode"' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'makeNVNSplitExport(preparedDirectory:' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q '0x98761234' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q '0x12345678' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'c1Offset' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'NVNSPL1' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'Validate & split NVN graphics' dm/ios/Sources/ImportScreen.swift
+          grep -q 'makeNVNSplitExport(preparedDirectory:' dm/ios/Sources/ImportScreen.swift
           grep -q 'Export raw shader samples' dm/ios/Sources/ImportScreen.swift
           grep -q 'ShaderSampleActivityView' dm/ios/Sources/ImportScreen.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
