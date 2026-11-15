@@ -1304,7 +1304,7 @@ private struct ImportScreenView: View {
                     Button {
                         Task { await testShaderTranslator() }
                     } label: {
-                        Label("Translate one Cuphead vertex shader", systemImage: "square.stack.3d.up")
+                        Label("Survey all Cuphead vertex shaders", systemImage: "square.stack.3d.up")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                     }
@@ -1378,7 +1378,7 @@ private struct ImportScreenView: View {
                     if testingShaderTranslator {
                         HStack(spacing: 10) {
                             ProgressView()
-                            Text("Translating a Cuphead vertex shader on this iPhone…")
+                            Text("Translating Cuphead vertex shaders on this iPhone…")
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -1888,57 +1888,73 @@ private struct ImportScreenView: View {
         do {
             let result = try await Task.detached(priority: .userInitiated) {
                 try ShaderTranslatorBridge.probe()
-                let probe = try UnityShaderSourceScanner.makeNVNVertexProbeJob(preparedDirectory: prepared)
-                let errorURL = probe.outputDirectoryURL.appendingPathComponent("cuphead_vertex_probe.error.txt")
-                try? FileManager.default.removeItem(at: errorURL)
+                let survey = try UnityShaderSourceScanner.makeNVNVertexSurveyJobs(preparedDirectory: prepared)
+                var translatorExit = "zero"
                 do {
                     try ShaderTranslatorBridge.translate(
-                        jobFileURL: probe.jobFileURL,
-                        outputDirectoryURL: probe.outputDirectoryURL
+                        jobFileURL: survey.jobFileURL,
+                        outputDirectoryURL: survey.outputDirectoryURL
                     )
                 } catch {
-                    let detail = (try? String(contentsOf: errorURL, encoding: .utf8)) ?? error.localizedDescription
-                    throw NSError(domain: "CupheadShaderProbe", code: 3, userInfo: [
-                        NSLocalizedDescriptionKey: detail
-                    ])
+                    translatorExit = error.localizedDescription
                 }
 
-                let spvURL = probe.outputDirectoryURL.appendingPathComponent("cuphead_vertex_probe.spv")
-                let reflectionURL = probe.outputDirectoryURL.appendingPathComponent("cuphead_vertex_probe.res.json")
-                let spv = try Data(contentsOf: spvURL)
-                guard spv.count >= 20, Array(spv.prefix(4)) == [0x03, 0x02, 0x23, 0x07] else {
-                    throw NSError(domain: "CupheadShaderProbe", code: 1, userInfo: [
-                        NSLocalizedDescriptionKey: "The translator returned no valid SPIR-V module."
-                    ])
+                var passed: [(key: String, instructionBytes: Int, c1Bytes: Int, spvBytes: Int, textures: Int, images: Int, cbufs: Int, sbufs: Int, notes: String)] = []
+                var failures: [String] = []
+                for sample in survey.samples {
+                    let spvURL = survey.outputDirectoryURL.appendingPathComponent(sample.key + ".spv")
+                    let reflectionURL = survey.outputDirectoryURL.appendingPathComponent(sample.key + ".res.json")
+                    let errorURL = survey.outputDirectoryURL.appendingPathComponent(sample.key + ".error.txt")
+                    guard let spv = try? Data(contentsOf: spvURL),
+                          spv.count >= 20,
+                          Array(spv.prefix(4)) == [0x03, 0x02, 0x23, 0x07] else {
+                        let detail = (try? String(contentsOf: errorURL, encoding: .utf8))?
+                            .components(separatedBy: .newlines).first ?? "No valid SPIR-V output"
+                        failures.append("\(sample.key): \(detail)")
+                        continue
+                    }
+                    guard let reflectionData = try? Data(contentsOf: reflectionURL),
+                          let reflection = try? JSONSerialization.jsonObject(with: reflectionData) as? [String: Any] else {
+                        failures.append("\(sample.key): SPIR-V valid, but reflection JSON is missing or invalid")
+                        continue
+                    }
+                    let textures = (reflection["textures"] as? [[String: Any]])?.count ?? 0
+                    let images = (reflection["images"] as? [[String: Any]])?.count ?? 0
+                    let cbufs = (reflection["cbufs"] as? [[String: Any]])?.count ?? 0
+                    let sbufs = (reflection["sbufs"] as? [[String: Any]])?.count ?? 0
+                    let notes = (reflection["notes"] as? [String]) ?? []
+                    passed.append((sample.key, sample.instructionBytes, sample.c1Bytes, spv.count,
+                                   textures, images, cbufs, sbufs, notes.joined(separator: "; ")))
                 }
-                let reflectionData = try Data(contentsOf: reflectionURL)
-                guard let reflection = try JSONSerialization.jsonObject(with: reflectionData) as? [String: Any] else {
-                    throw NSError(domain: "CupheadShaderProbe", code: 2, userInfo: [
-                        NSLocalizedDescriptionKey: "The translator reflection report was not valid JSON."
-                    ])
+
+                let ranked = passed.sorted {
+                    let left = $0.textures + $0.images + $0.cbufs + $0.sbufs
+                    let right = $1.textures + $1.images + $1.cbufs + $1.sbufs
+                    if left != right { return left > right }
+                    return $0.instructionBytes > $1.instructionBytes
                 }
-                let textures = (reflection["textures"] as? [[String: Any]])?.count ?? 0
-                let images = (reflection["images"] as? [[String: Any]])?.count ?? 0
-                let constantBuffers = (reflection["cbufs"] as? [[String: Any]])?.count ?? 0
-                let storageBuffers = (reflection["sbufs"] as? [[String: Any]])?.count ?? 0
-                let notes = (reflection["notes"] as? [String]) ?? []
-                return """
-                translation|passed
-                sample|\(probe.sourceName)
-                stage|vertex (decoded from SPH)
-                sass_instruction_bytes|\(probe.instructionBytes)
-                sass_bundles|\(probe.instructionBytes / 32)
-                spirv_bytes|\(spv.count)
-                spirv_magic|valid
-                reflection|textures=\(textures), images=\(images), constant_buffers=\(constantBuffers), storage_buffers=\(storageBuffers)
-                translator_notes|\(notes.isEmpty ? "none" : notes.joined(separator: "; "))
-                defaults|unresolved vertex attribute types=float; unresolved texture types=2D; unresolved image formats=RGBA8 UNORM
-                meaning|This proves one Cuphead vertex sample passed through Ryujinx to SPIR-V. It does not yet prove correct resource typing, Metal compilation, or game rendering.
-                """
+                let totalTextures = passed.reduce(0) { $0 + $1.textures }
+                let totalImages = passed.reduce(0) { $0 + $1.images }
+                let totalCBufs = passed.reduce(0) { $0 + $1.cbufs }
+                let totalSBufs = passed.reduce(0) { $0 + $1.sbufs }
+                let topLines = ranked.prefix(8).map {
+                    "candidate|\($0.key)|sass_bytes=\($0.instructionBytes)|c1_bytes=\($0.c1Bytes)|spv_bytes=\($0.spvBytes)|textures=\($0.textures)|images=\($0.images)|cbufs=\($0.cbufs)|sbufs=\($0.sbufs)|notes=\($0.notes.isEmpty ? "none" : $0.notes)"
+                }
+                let failureLines = failures.prefix(12).map { "failure|\($0)" }
+                return ([
+                    "survey|\(failures.isEmpty && passed.count == survey.samples.count ? "complete" : "partial")",
+                    "stage|vertex",
+                    "jobs|\(survey.samples.count)",
+                    "translated_valid_spirv|\(passed.count)",
+                    "failed_or_invalid|\(failures.count)",
+                    "resource_totals|textures=\(totalTextures), images=\(totalImages), constant_buffers=\(totalCBufs), storage_buffers=\(totalSBufs)",
+                    "translator_exit|\(translatorExit)",
+                    "ranking|up to 8 shaders sorted by reflected resource count, then instruction size"
+                ] + topLines + failureLines).joined(separator: "\n")
             }.value
             shaderTranslatorLog = result
         } catch {
-            shaderTranslatorLog = "translation_failed|\(error.localizedDescription)"
+            shaderTranslatorLog = "survey_failed|\(error.localizedDescription)"
         }
     }
     private func testOnDeviceMetalCompiler() async {
