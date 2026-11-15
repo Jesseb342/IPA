@@ -4,6 +4,69 @@ import Compression
 /// Reads the app's indexed DMROMFS1 image without expanding multi-gigabyte game data.
 /// This first pass inventories Unity asset containers; it does not decrypt or upload anything.
 enum UnityShaderSourceScanner {
+    /// Creates a bounded, single-file export containing only selected raw program-code
+    /// samples and a plain-text manifest. No game files, keys, or full Shader objects
+    /// are included.
+    static func makeSampleExport(preparedDirectory: URL) throws -> URL {
+        let root = preparedDirectory.appendingPathComponent("ShaderSources", isDirectory: true)
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: root.path) else {
+            throw ScanError.invalidImage("No local shader samples were found. Run the shader inspection first.")
+        }
+        let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
+        var samples: [(name: String, data: Data)] = []
+        var totalBytes = 0
+        while let url = enumerator?.nextObject() as? URL {
+            guard url.pathExtension.lowercased() == "bin" else { continue }
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true else { continue }
+            let size = values.fileSize ?? 0
+            guard size > 0, samples.count < 64, size <= 8 * 1024 * 1024 - totalBytes else { continue }
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            guard data.count == size else { continue }
+            samples.append((url.lastPathComponent, data))
+            totalBytes += data.count
+        }
+        samples.sort { $0.name < $1.name }
+        guard !samples.isEmpty else {
+            throw ScanError.invalidImage("No bounded shader program samples are available to export.")
+        }
+
+        let manifest = ([ "format|NXSAMPLES1", "sample_count|\(samples.count)",
+                          "payload_bytes|\(totalBytes)", "scope|raw Unity shader program-code samples only",
+                          "privacy|no keys, NSP/XCI/NCA files, RomFS, or full serialized objects" ] +
+                       samples.map { "sample|\($0.name)|bytes=\($0.data.count)" })
+            .joined(separator: "\n") + "\n"
+        let manifestData = Data(manifest.utf8)
+        guard manifestData.count <= Int(UInt32.max) else {
+            throw ScanError.invalidImage("The shader sample manifest is too large.")
+        }
+
+        var archive = Data("NXSAMP1\0".utf8)
+        func appendLE32(_ value: UInt32) {
+            archive.append(UInt8(value & 0xff))
+            archive.append(UInt8((value >> 8) & 0xff))
+            archive.append(UInt8((value >> 16) & 0xff))
+            archive.append(UInt8((value >> 24) & 0xff))
+        }
+        appendLE32(UInt32(manifestData.count))
+        archive.append(manifestData)
+        for sample in samples {
+            let name = Data(sample.name.utf8)
+            guard name.count <= Int(UInt16.max), sample.data.count <= Int(UInt32.max) else {
+                throw ScanError.invalidImage("A shader sample entry exceeds the export format limits.")
+            }
+            archive.append(UInt8(name.count & 0xff))
+            archive.append(UInt8((name.count >> 8) & 0xff))
+            appendLE32(UInt32(sample.data.count))
+            archive.append(name)
+            archive.append(sample.data)
+        }
+        let exportURL = preparedDirectory.appendingPathComponent("UnityShaderSamples.nxsamples")
+        try archive.write(to: exportURL, options: .atomic)
+        return exportURL
+    }
+
     private struct Entry {
         let offset: UInt64
         let length: UInt64
@@ -1005,6 +1068,8 @@ enum UnityShaderSourceScanner {
         var codeRecords = 0
         var savedRecords = 0
         var savedBytes = 0
+        var selectedPayloadsByLength: [Int: (index: Int, payload: [UInt8], hash: String)] = [:]
+        var duplicatePayloadSample: (index: Int, length: Int, payload: [UInt8], hash: String)?
         var failures = 0
         var typeCounts: [Int32: Int] = [:]
         var lengthCounts: [Int: Int] = [:]
@@ -1121,29 +1186,53 @@ enum UnityShaderSourceScanner {
                         "serialized_program_profile|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|index=\(index)|version=\(version)|gpu_program_type=\(programType)|keywords=\(keywordCount)|keyword_sample=\(keywordText)|code_bytes=\(codeLength)|zero_bytes=\(zeroCount)|zero_pct=\(String(format: "%.1f", Double(zeroCount) * 100.0 / Double(codeLength)))|printable_pct=\(String(format: "%.1f", Double(printableCount) * 100.0 / Double(codeLength)))|first_nonzero=\(firstNonzero)|fnv1a64=\(payloadHash)|prefix=\(hex(payload, 0, 32))|nonzero_hex=\(nonzeroHex)|ascii_preview=\(safe(firstAscii))|signatures=\(signatureHits.isEmpty ? "none" : signatureHits)"
                     )
                 }
-                if savedRecords < maxSavedRecords && codeLength <= maxSavedBytes - savedBytes {
-                    do {
-                        let codeDirectory = outputDirectory.appendingPathComponent("ProgramCode", isDirectory: true)
-                        try FileManager.default.createDirectory(at: codeDirectory, withIntermediateDirectories: true)
-                        let codeURL = codeDirectory.appendingPathComponent(
-                            "\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(index)-t\(programType).bin"
-                        )
-                        try Data(payload).write(to: codeURL, options: .atomic)
-                        savedRecords += 1
-                        savedBytes += codeLength
-                    } catch {
-                        // Keep scanning and report the successfully parsed records.
-                    }
+                // Retain one deterministic sample for each code-length class.
+                // The in-memory forensic sample budget matches the on-disk 8 MiB cap.
+                if selectedPayloadsByLength[codeLength] == nil,
+                   selectedPayloadsByLength.count < maxSavedRecords,
+                   codeLength <= maxSavedBytes - savedBytes {
+                    selectedPayloadsByLength[codeLength] = (index, payload, payloadHash)
+                    savedBytes += codeLength
+                } else if duplicatePayloadSample == nil,
+                          selectedPayloadsByLength.values.contains(where: { $0.hash == payloadHash }),
+                          codeLength <= maxSavedBytes - savedBytes {
+                    // One exact duplicate is useful for distinguishing record metadata
+                    // from payload bytes without exporting every repeated record.
+                    duplicatePayloadSample = (index, codeLength, payload, payloadHash)
+                    savedBytes += codeLength
                 }
             }
         }
 
+        let codeDirectory = outputDirectory.appendingPathComponent("ProgramCode", isDirectory: true)
+        try? FileManager.default.createDirectory(at: codeDirectory, withIntermediateDirectories: true)
+        for (length, sample) in selectedPayloadsByLength.sorted(by: { $0.key < $1.key }) {
+            guard savedRecords < maxSavedRecords else { break }
+            let codeURL = codeDirectory.appendingPathComponent(
+                "\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(sample.index)-t\(programType)-len\(length).bin"
+            )
+            do {
+                try Data(sample.payload).write(to: codeURL, options: .atomic)
+                savedRecords += 1
+            } catch { }
+        }
+        var savedDuplicate = false
+        if let duplicate = duplicatePayloadSample, savedRecords < maxSavedRecords {
+            let duplicateURL = codeDirectory.appendingPathComponent(
+                "\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(duplicate.index)-t\(programType)-duplicate.bin"
+            )
+            do {
+                try Data(duplicate.payload).write(to: duplicateURL, options: .atomic)
+                savedRecords += 1
+                savedDuplicate = true
+            } catch { }
+        }
         let types = typeCounts.keys.sorted().map { "\($0):\(typeCounts[$0] ?? 0)" }.joined(separator: ",")
         let lengths = lengthCounts.keys.sorted().map { "\($0):\(lengthCounts[$0] ?? 0)" }
         let lengthSummary = lengths.prefix(20).joined(separator: ",")
         return [
             "serialized_program_parse|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|count=\(count)|valid_records=\(validRecords)|code_records=\(codeRecords)|failures=\(failures)|entry_size=\(entrySize)|status=\(validRecords == count ? "all_records_parsed" : "partial")",
-            "serialized_program_types|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|counts=\(types)|saved_code_records=\(savedRecords)|saved_code_bytes=\(savedBytes)|local_only=true",
+            "serialized_program_types|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|counts=\(types)|saved_code_records=\(savedRecords)|saved_code_bytes=\(savedBytes)|sample_selection=one_per_code_length_class|duplicate_pair_saved=\(savedDuplicate)|local_only=true",
             "serialized_program_code_lengths|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|unique_lengths=\(lengthCounts.count)|distribution=\(lengthSummary)|truncated=\(lengthCounts.count > 20)",
             "serialized_program_profile_summary|object_index=\(objectIndex)|platform=\(platform)|chunk=\(chunkIndex)|profiled_code_records=\(codeRecords)|sampled_profiles=\(samples.count)|sample_strategy=evenly_spaced_record_indices|unique_payload_hashes=\(payloadHashes.count)|duplicate_payload_records=\(max(0, codeRecords - payloadHashes.count))|local_only=true"
         ] + samples
