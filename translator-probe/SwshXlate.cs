@@ -244,7 +244,20 @@ static class SwshXlate
                 File.WriteAllText(Path.Combine(outDir, key + ".res.json"), res.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
                 ok++;
             }
-            catch (Exception e) { bad++; Console.Error.WriteLine($"[RED] {key}: {e.GetType().Name}: {e.Message.Split('\n')[0]}"); if (Environment.GetEnvironmentVariable("DMSH_STACK") != null) Console.Error.WriteLine(e.StackTrace); }
+            catch (Exception e)
+            {
+                bad++;
+                string detail = $"{e.GetType().Name}: {e.Message.Split('\n')[0]}";
+                try
+                {
+                    Directory.CreateDirectory(outDir);
+                    File.WriteAllText(Path.Combine(outDir, key + ".error.txt"),
+                        detail + Environment.NewLine + e.StackTrace);
+                }
+                catch { }
+                Console.Error.WriteLine($"[RED] {key}: {detail}");
+                if (Environment.GetEnvironmentVariable("DMSH_STACK") != null) Console.Error.WriteLine(e.StackTrace);
+            }
         }
         Console.WriteLine($"translated: {ok} ok, {bad} failed");
         return bad == 0 ? 0 : 1;
