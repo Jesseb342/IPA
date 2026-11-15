@@ -2233,6 +2233,23 @@ private struct ImportScreenView: View {
                 let source = try String(contentsOf: msl, encoding: .utf8)
                 let library = try OnDeviceMetalCompiler.compile(source: source)
                 let names = library.functionNames.sorted()
+                let pipelineResult: (String, String) = {
+                    do {
+                        _ = try OnDeviceMetalCompiler.createFixtureRenderPipeline(
+                            vertexLibrary: library,
+                            vertexFunctionName: "main0"
+                        )
+                        return (
+                            "render_pipeline|created",
+                            "pipeline_vertex_layout|attribute0=float4@0,attribute1=float4@16|stride=32|step=perVertex|provisional=true"
+                        )
+                    } catch {
+                        let detail = error.localizedDescription
+                            .replacingOccurrences(of: "|", with: "_")
+                            .replacingOccurrences(of: "\n", with: " ")
+                        return ("render_pipeline|failed", "render_pipeline_error|\\(detail)")
+                    }
+                }()
                 let diagnosticText = (try String(contentsOf: diagnostics, encoding: .utf8))
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: "\n", with: "; ")
@@ -2249,7 +2266,10 @@ private struct ImportScreenView: View {
                     "spirv_cross|\(diagnosticText)",
                     "metal_compile|success",
                     "metal_functions|\(names.isEmpty ? "none reported" : names.joined(separator: ","))",
-                    "metal_library|created"
+                    "metal_library|created",
+                    pipelineResult.0,
+                    pipelineResult.1,
+                    "pipeline_scope|state creation only; no vertex buffers bound and no draw submitted"
                 ]
                 if let reflectionData = try? Data(contentsOf: reflectionURL),
                    let reflection = try? JSONSerialization.jsonObject(with: reflectionData) as? [String: Any] {
