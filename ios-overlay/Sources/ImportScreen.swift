@@ -2250,6 +2250,19 @@ private struct ImportScreenView: View {
                         return ("render_pipeline|failed", "render_pipeline_error|\(detail)")
                     }
                 }()
+                let drawResult: String = {
+                    do {
+                        return try OnDeviceMetalCompiler.runFixtureOffscreenDraw(
+                            vertexLibrary: library,
+                            vertexFunctionName: "main0"
+                        )
+                    } catch {
+                        let detail = error.localizedDescription
+                            .replacingOccurrences(of: "|", with: "_")
+                            .replacingOccurrences(of: "\\n", with: " ")
+                        return "gpu_draw|failed\\ngpu_draw_error|\\(detail)"
+                    }
+                }()
                 let diagnosticText = (try String(contentsOf: diagnostics, encoding: .utf8))
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: "\n", with: "; ")
@@ -2269,7 +2282,8 @@ private struct ImportScreenView: View {
                     "metal_library|created",
                     pipelineResult.0,
                     pipelineResult.1,
-                    "pipeline_scope|state creation only; no vertex buffers bound and no draw submitted"
+                    drawResult,
+                    "pipeline_scope|pipeline state validated separately; see gpu_draw report for actual submission"
                 ]
                 if let reflectionData = try? Data(contentsOf: reflectionURL),
                    let reflection = try? JSONSerialization.jsonObject(with: reflectionData) as? [String: Any] {
