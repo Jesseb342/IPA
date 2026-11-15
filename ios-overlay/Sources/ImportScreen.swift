@@ -1889,10 +1889,19 @@ private struct ImportScreenView: View {
             let result = try await Task.detached(priority: .userInitiated) {
                 try ShaderTranslatorBridge.probe()
                 let probe = try UnityShaderSourceScanner.makeNVNVertexProbeJob(preparedDirectory: prepared)
-                try ShaderTranslatorBridge.translate(
-                    jobFileURL: probe.jobFileURL,
-                    outputDirectoryURL: probe.outputDirectoryURL
-                )
+                let errorURL = probe.outputDirectoryURL.appendingPathComponent("cuphead_vertex_probe.error.txt")
+                try? FileManager.default.removeItem(at: errorURL)
+                do {
+                    try ShaderTranslatorBridge.translate(
+                        jobFileURL: probe.jobFileURL,
+                        outputDirectoryURL: probe.outputDirectoryURL
+                    )
+                } catch {
+                    let detail = (try? String(contentsOf: errorURL, encoding: .utf8)) ?? error.localizedDescription
+                    throw NSError(domain: "CupheadShaderProbe", code: 3, userInfo: [
+                        NSLocalizedDescriptionKey: detail
+                    ])
+                }
 
                 let spvURL = probe.outputDirectoryURL.appendingPathComponent("cuphead_vertex_probe.spv")
                 let reflectionURL = probe.outputDirectoryURL.appendingPathComponent("cuphead_vertex_probe.res.json")
