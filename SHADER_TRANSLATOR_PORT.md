@@ -651,3 +651,46 @@ The next validation step is implemented in app source:
 A successful pipeline-state creation proves that Metal accepts this vertex function with the test fragment stage and provisional input descriptor. It does not validate Cuphead's actual host-side vertex-buffer declarations, buffer contents, texture/sampler state, constant/storage-buffer contents, actual fragment shader pairing, or rendered output. Next, recover the Unity/NVN vertex declaration and host resource-binding ABI, then replace the provisional descriptor and add real buffer binding/draw validation.
 
 **Build status:** source, workflow syntax gates, and documentation are committed only after GitHub confirms the writes. No Actions workflow is dispatched by these commits; the user must manually run **Build Universal NxNative Shell**. The render-pipeline creation code has not yet been built or exercised on the iPhone.
+
+
+## On-device render-pipeline creation results — 2026-11-15
+
+The user has now run the updated IPA on an iPhone and reported **successful render-pipeline state creation for both Cuphead vertex fixtures**.
+
+### Object 138 / subprogram 12
+
+- SPIR-V: 12,104 bytes; MSL: 6,316 bytes.
+- SPIRV-Cross 0.64.0, MSL 2.3.0; Metal library created with function `main0`.
+- `render_pipeline|created`.
+- Provisional input layout accepted: attribute 0 `float4` at offset 0, attribute 1 `float4` at offset 16, stride 32, per-vertex.
+- Translator resources: one sampled texture (handle 8, type 3, format Unknown) and two constant buffers (binding 3/slot 1 and binding 2/slot 3); no storage buffers and no translator notes.
+- SPIR-V reflection: two inputs, three outputs, four descriptors, three buffer layouts. Inputs at locations 0 and 1 are `vec4<f32>`; user outputs at locations 0 and 1 are `vec4<f32>`, plus a built-in/interface struct. Descriptors are `support_buffer` binding 0, `vp_t_tcb_8` sampled image binding 1, `vp_c3` binding 2, and `vp_c1` binding 3.
+- `support_buffer` has eight members at offsets 0, 16, 144, 160, 176, 192, 1360, and 1376. `vp_c3` and `vp_c1` each contain 4096 `vec4<f32>` elements with 16-byte stride.
+
+### Object 141 / subprogram 8
+
+- SPIR-V: 9,764 bytes; MSL: 5,323 bytes.
+- SPIRV-Cross 0.64.0, MSL 2.3.0; Metal library created with function `main0`.
+- `render_pipeline|created`, using the same provisional two-`float4` input layout and stride 32.
+- Translator resources: two constant buffers (binding 3/slot 1 and binding 2/slot 3), one storage buffer (binding 1, slot 0, constant-buffer slot 0, offset 68), no texture/image, and no translator notes.
+- SPIR-V reflection: two inputs, four outputs, four descriptors, four buffer layouts. `vp_s0) is a runtime `u32` array with 4-byte stride; the other common descriptors are `support_buffer`, `vp_c3`, and `vp_c1`.
+
+### What is now established
+
+For two real Cuphead vertex programs, the full offline shader conversion path reaches an iPhone Metal render-pipeline state:
+
+`Maxwell SASS → SPIR-V → MSL → Metal library → MTLRenderPipelineState`
+
+This is a meaningful milestone beyond shader compilation. It establishes that Metal accepted each translated vertex function when paired with the test fragment function and provisional vertex descriptor.
+
+### What is not established
+
+No vertex buffers were bound and no draw was submitted. The provisional `float4` attribute formats/stride are not yet confirmed against Cuphead's actual Unity/NVN vertex declarations. The test fragment shader is synthetic, not Cuphead's matching fragment shader. The texture's format/dimension/sample state, sampler mapping, constant-buffer contents, storage-buffer contents, and host-side resource binding are also unresolved. Pipeline creation does not prove shader output correctness or a rendered Cuphead frame.
+
+The app report previously emitted an outdated final `scope|` line saying no render pipeline was tested, even though the new `render_pipeline|created` and `pipeline_scope|` lines correctly recorded the result. The UI source is now corrected so future reports state that the Metal library and render-pipeline state were created, while still explicitly noting that no buffers were bound and no draw/game rendering was tested.
+
+### Next technical priority
+
+Stop broad shader-translation surveying for now. Preserve these two fixtures as regression tests and move to an offscreen draw test with explicit synthetic vertex data and minimally valid resource buffers. Before treating that as a Cuphead rendering test, recover the authoritative Unity/NVN vertex declaration and resource ABI. For object 138, texture handle 8 and its unknown format/dimension need investigation; for object 141, the storage-buffer mapping at binding 1 / offset 68 needs a host-side binding match. The generated `.metal` source should be inspected/exported to confirm exact MSL argument-buffer and attribute annotations before adding resource bindings.
+
+**Build status:** the report update and corrected scope string are source/documentation changes only. No workflow has been dispatched. The user must manually run **Build Universal NxNative Shell** to receive the corrected report wording; the already reported pipeline successes are from the prior build.
