@@ -76,6 +76,103 @@ private enum ShaderTranslatorError: LocalizedError {
     }
 }
 
+private enum ShaderSPIRVReflection {
+    private struct Variable { let type: UInt32; let id: UInt32; let storage: UInt32 }
+
+    static func report(_ data: Data, key: String) -> [String] {
+        guard data.count >= 20, data.count % 4 == 0 else { return ["spirv_reflection|key=\(key)|status=invalid_size"] }
+        let b = [UInt8](data)
+        var w: [UInt32] = []
+        for i in stride(from: 0, to: b.count, by: 4) {
+            w.append(UInt32(b[i]) | (UInt32(b[i+1]) << 8) | (UInt32(b[i+2]) << 16) | (UInt32(b[i+3]) << 24))
+        }
+        guard w[0] == 0x07230203 else { return ["spirv_reflection|key=\(key)|status=bad_magic"] }
+        var names: [UInt32:String] = [:], memberNames: [UInt64:String] = [:]
+        var dec: [UInt32:[UInt32:UInt32]] = [:], offsets: [UInt64:UInt32] = [:]
+        var kind: [UInt32:String] = [:], a: [UInt32:UInt32] = [:], z: [UInt32:UInt32] = [:]
+        var members: [UInt32:[UInt32]] = [:], constants: [UInt32:UInt32] = [:], vars: [Variable] = []
+        func mk(_ t: UInt32, _ m: UInt32) -> UInt64 { (UInt64(t) << 32) | UInt64(m) }
+        func str(_ xs: ArraySlice<UInt32>) -> String {
+            var bytes: [UInt8] = []
+            for x in xs { for shift in stride(from: 0, to: 32, by: 8) {
+                let v = UInt8((x >> UInt32(shift)) & 255)
+                if v == 0 { return String(decoding: bytes, as: UTF8.self) }
+                bytes.append(v)
+            }}
+            return String(decoding: bytes, as: UTF8.self)
+        }
+        var i = 5, malformed = false
+        while i < w.count {
+            let n = Int(w[i] >> 16), op = w[i] & 65535
+            guard n > 0, i <= w.count - n else { malformed = true; break }
+            let x = w[(i+1)..<(i+n)]
+            switch op {
+            case 5: if x.count >= 2 { names[x[x.startIndex]] = str(x.dropFirst()) }
+            case 6: if x.count >= 3 { memberNames[mk(x[x.startIndex], x[x.startIndex+1])] = str(x.dropFirst(2)) }
+            case 21: if x.count >= 3 { kind[x[x.startIndex]]="int"; a[x[x.startIndex]]=x[x.startIndex+1]; z[x[x.startIndex]]=x[x.startIndex+2] }
+            case 22: if x.count >= 2 { kind[x[x.startIndex]]="float"; a[x[x.startIndex]]=x[x.startIndex+1] }
+            case 23,24: if x.count >= 3 { kind[x[x.startIndex]] = op == 23 ? "vector" : "matrix"; a[x[x.startIndex]]=x[x.startIndex+1]; z[x[x.startIndex]]=x[x.startIndex+2] }
+            case 25: if x.count >= 2 { kind[x[x.startIndex]]="image"; a[x[x.startIndex]]=x[x.startIndex+1] }
+            case 26: if !x.isEmpty { kind[x[x.startIndex]]="sampler" }
+            case 27: if x.count >= 2 { kind[x[x.startIndex]]="sampled_image"; a[x[x.startIndex]]=x[x.startIndex+1] }
+            case 28: if x.count >= 3 { kind[x[x.startIndex]]="array"; a[x[x.startIndex]]=x[x.startIndex+1]; z[x[x.startIndex]]=x[x.startIndex+2] }
+            case 29: if x.count >= 2 { kind[x[x.startIndex]]="runtime_array"; a[x[x.startIndex]]=x[x.startIndex+1] }
+            case 30: if !x.isEmpty { kind[x[x.startIndex]]="struct"; members[x[x.startIndex]]=Array(x.dropFirst()) }
+            case 32: if x.count >= 3 { kind[x[x.startIndex]]="pointer"; a[x[x.startIndex]]=x[x.startIndex+1]; z[x[x.startIndex]]=x[x.startIndex+2] }
+            case 43: if x.count >= 3 { constants[x[x.startIndex+1]]=x[x.startIndex+2] }
+            case 59: if x.count >= 3 { vars.append(Variable(type:x[x.startIndex], id:x[x.startIndex+1], storage:x[x.startIndex+2])) }
+            case 71: if x.count >= 2 { dec[x[x.startIndex], default:[:]][x[x.startIndex+1]] = x.count >= 3 ? x[x.startIndex+2] : 1 }
+            case 72: if x.count >= 4 && x[x.startIndex+2] == 35 { offsets[mk(x[x.startIndex],x[x.startIndex+1])] = x[x.startIndex+3] }
+            default: break
+            }
+            i += n
+        }
+        func safe(_ s: String) -> String { s.replacingOccurrences(of:"|",with:"_").replacingOccurrences(of:"\n",with:" ") }
+        func type(_ id: UInt32, _ depth: Int = 0) -> String {
+            if depth > 5 { return "type#\(id)" }
+            switch kind[id] {
+            case "int": return "\((z[id] ?? 0) == 0 ? "u" : "i")\(a[id] ?? 32)"
+            case "float": return "f\(a[id] ?? 32)"
+            case "vector": return "vec\(z[id] ?? 0)<\(type(a[id] ?? 0,depth+1))>"
+            case "matrix": return "mat\(z[id] ?? 0)<\(type(a[id] ?? 0,depth+1))>"
+            case "array": return "array[\(constants[z[id] ?? 0].map { String($0) } ?? "?")]<\(type(a[id] ?? 0,depth+1))>"
+            case "runtime_array": return "runtime_array<\(type(a[id] ?? 0,depth+1))>"
+            case "struct": return "struct#\(id)"
+            case "pointer": return type(z[id] ?? 0,depth+1)
+            case "image": return "image"
+            case "sampler": return "sampler"
+            case "sampled_image": return "sampled_image"
+            default: return "type#\(id)"
+            }
+        }
+        var out: [String] = [], ins = 0, outs = 0, descs = 0, buffers = 0
+        for v in vars {
+            let d = dec[v.id] ?? [:]
+            let pointee = kind[v.type] == "pointer" ? (z[v.type] ?? 0) : v.type
+            let name = safe(names[v.id] ?? "id\(v.id)")
+            if v.storage == 1 || v.storage == 3 {
+                let dir = v.storage == 1 ? "input" : "output"
+                if v.storage == 1 { ins += 1 } else { outs += 1 }
+                out.append("interface_\(dir)|key=\(key)|name=\(name)|location=\(d[30].map{String($0)} ?? "na")|builtin=\(d[11].map{"builtin#\($0)"} ?? "none")|type=\(type(pointee))")
+            }
+            if let binding = d[33] {
+                descs += 1
+                out.append("spirv_descriptor|key=\(key)|name=\(name)|set=\(d[34].map{String($0)} ?? "0")|binding=\(binding)|storage_class=\(v.storage)|type=\(type(pointee))")
+            }
+            if (v.storage == 2 || v.storage == 12), kind[pointee] == "struct" {
+                buffers += 1
+                out.append("spirv_buffer_layout|key=\(key)|name=\(name)|binding=\(d[33].map{String($0)} ?? "na")|members=\(members[pointee]?.count ?? 0)")
+                for (j, mt) in (members[pointee] ?? []).enumerated().prefix(32) {
+                    let ix = UInt32(j), k = mk(pointee,ix)
+                    out.append("spirv_buffer_member|key=\(key)|buffer=\(name)|member=\(safe(memberNames[k] ?? "member\(j)"))|index=\(j)|offset=\(offsets[k].map{String($0)} ?? "na")|type=\(type(mt))")
+                }
+            }
+        }
+        out.insert("spirv_reflection|key=\(key)|status=\(malformed ? "partial" : "parsed")|inputs=\(ins)|outputs=\(outs)|descriptors=\(descs)|buffer_layouts=\(buffers)",at:0)
+        return out
+    }
+}
+
 private struct NSPContentRecord: Sendable {
     let type: String
     let titleID: String
