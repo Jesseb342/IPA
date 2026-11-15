@@ -320,8 +320,11 @@ jobs:
           swiftc -frontend -parse dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'enum ShaderTranslatorBridge' dm/ios/Sources/ImportScreen.swift
           grep -q 'nxn_translate_shader_jobs' dm/ios/Sources/ImportScreen.swift
-          grep -q 'Test Shader Translator' dm/ios/Sources/ImportScreen.swift
+          grep -q 'Translate one Cuphead vertex shader' dm/ios/Sources/ImportScreen.swift
           grep -q 'ShaderTranslatorBridge.probe()' dm/ios/Sources/ImportScreen.swift
+          grep -q 'makeNVNVertexProbeJob(preparedDirectory:' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'cuphead_vertex_probe' dm/ios/Sources/ImportScreen.swift
+          grep -q 'sassVersion == 3' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'makeLibrary(source: source, options: options)' dm/ios/Sources/OnDeviceMetalCompiler.swift
           echo "IPA import UI overlay applied."
 
