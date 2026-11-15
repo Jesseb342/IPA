@@ -325,6 +325,8 @@ jobs:
           grep -q 'makeNVNVertexProbeJob(preparedDirectory:' dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'cuphead_vertex_probe' dm/ios/Sources/ImportScreen.swift
           grep -q 'sassVersion == 3' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'ShaderTranslatorBridge.translate(' dm/ios/Sources/ImportScreen.swift
+          swiftc -frontend -parse dm/ios/Sources/ImportScreen.swift
           grep -q 'makeLibrary(source: source, options: options)' dm/ios/Sources/OnDeviceMetalCompiler.swift
           echo "IPA import UI overlay applied."
 
