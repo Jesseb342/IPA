@@ -614,3 +614,21 @@ A successful run will establish that this specific translated Cuphead vertex sha
 ### Next manual run
 
 The source and workflow changes are committed, but no workflow has been dispatched and no IPA has been built or installed. After the next manual **Build Universal NxNative Shell** run, install the resulting IPA, extract Cuphead if needed, run **Inspect Unity Shader Objects**, run **Survey all Cuphead vertex shaders**, then press **Convert object 138 to MSL + Metal**. Share the complete conversion/Metal report, including any SPIRV-Cross or Metal compiler error. Commits still do not auto-run the workflow.
+
+
+## Cuphead object 141 storage-buffer MSL/Metal fixture — 2026-11-15
+
+Object 138/subprogram 12 has now passed on-device SPIR-V-to-MSL conversion and Metal library compilation on the iPhone. The user-reported result was: 12,104-byte SPIR-V, 6,316-byte MSL, SPIRV-Cross C API 0.64.0 with the pinned Vulkan SDK 1.3.296.0 source revision, MSL 2.3.0, Metal compile success, and a created library exposing `main0`. This verifies library compilation for that one vertex shader only; it does not establish render-pipeline creation or game rendering.
+
+The next fixture is now implemented as **Convert object 141 / subprogram 8 to MSL + Metal**:
+
+- The app resolves the sample dynamically from the generated Unity metadata sidecar, requiring object index 141, subprogram index 8, platform 19, and GPU program type 26. It refuses zero or ambiguous matches rather than guessing a code-length filename.
+- It uses the existing SPIRV-Cross bridge and on-device Metal compiler; object 138 remains available as the regression fixture.
+- The report includes SPIRV-Cross diagnostics, Metal library/function results, translator resource counts and entries (including storage-buffer slot/binding details), plus SPIR-V interfaces, descriptors, and buffer layout/member information.
+- The expected object-141 storage-buffer reflection is a test target, not a pre-declared success condition. The actual on-device report must confirm what was translated and compiled.
+
+### Next manual test
+
+Manually run **Build Universal NxNative Shell**, install the IPA, rerun **Inspect Unity Shader Objects** and **Survey all Cuphead vertex shaders**, then run the object-141 conversion button. Share the complete report, including any translator reflection and Metal diagnostics. Keep object 138's successful result as the regression baseline.
+
+**Build status:** source and workflow gates are committed only after repository writes succeed. No workflow is dispatched automatically or by this change. The new object-141 button and reporting path have not yet been built or tested on-device. Even if object 141 compiles, that will prove MSL/Metal library acceptance for a storage-buffer-bearing shader, not correct resource binding or rendering.
