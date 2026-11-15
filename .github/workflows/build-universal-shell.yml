@@ -362,6 +362,11 @@ jobs:
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
           grep -q 'enum OnDeviceMetalCompiler' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'createFixtureRenderPipeline' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'runFixtureOffscreenDraw' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'MTLRenderPipelineReflection' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'gpu_draw|completed' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'draw_readback|success' dm/ios/Sources/OnDeviceMetalCompiler.swift
+          grep -q 'runFixtureOffscreenDraw' dm/ios/Sources/ImportScreen.swift
           grep -q 'MTLRenderPipelineDescriptor' dm/ios/Sources/OnDeviceMetalCompiler.swift
           grep -q 'render_pipeline|created' dm/ios/Sources/ImportScreen.swift
           grep -q 'pipeline_vertex_layout' dm/ios/Sources/ImportScreen.swift
@@ -592,7 +597,7 @@ jobs:
 
           binary = pathlib.Path(sys.argv[1])
           data = binary.read_bytes()
-          required = (b"ImportScreenView", b"_dm_show_import_screen", b"Inspect Unity Shader Objects", b"Survey all Cuphead vertex shaders", b"Convert object 138 to MSL + Metal", b"Convert object 141 / subprogram 8 to MSL + Metal", b"createFixtureRenderPipeline", b"pipeline_vertex_layout", b"SPIRVCrossBridge", b"translated_valid_spirv", b"spirv_buffer_member", b"unity_metadata_sidecars", b"spirv_reflection", b"NxNativeSPIRVCross.framework", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso", b"nxn_arm64_inspect_function", b"nxn_arm64_discover_linker_stubs")
+          required = (b"ImportScreenView", b"_dm_show_import_screen", b"Inspect Unity Shader Objects", b"Survey all Cuphead vertex shaders", b"Convert object 138 to MSL + Metal", b"Convert object 141 / subprogram 8 to MSL + Metal", b"createFixtureRenderPipeline", b"runFixtureOffscreenDraw", b"gpu_draw|completed", b"draw_readback|success", b"pipeline_vertex_layout", b"SPIRVCrossBridge", b"translated_valid_spirv", b"spirv_buffer_member", b"unity_metadata_sidecars", b"spirv_reflection", b"NxNativeSPIRVCross.framework", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso", b"nxn_arm64_inspect_function", b"nxn_arm64_discover_linker_stubs")
           missing = [item.decode() for item in required if item not in data]
           if missing:
               print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
