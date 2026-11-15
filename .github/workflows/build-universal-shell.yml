@@ -279,6 +279,13 @@ jobs:
           shasum -a 256 dm/ios/Sources/UnityShaderSourceScanner.swift
           cmp ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift dm/ios/Sources/UnityShaderSourceScanner.swift
           grep -q 'unityfs_scanner_revision|unity2017-shader-payload-profile-v11-distributed' dm/ios/Sources/UnityShaderSourceScanner.swift
+          # The v11 report must profile every parsed code record, sample across
+          # the complete record range, and fingerprint payloads without uploading them.
+          grep -q 'sample_strategy=evenly_spaced_record_indices' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'unique_payload_hashes=' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'duplicate_payload_records=' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'fnv1a64=' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'local_only=true' dm/ios/Sources/UnityShaderSourceScanner.swift
           python3 ipa-overlay/ios-overlay/tools/apply_import_ui.py dm/ios/Sources/front_ios.m
           grep -q 'dm_show_import_screen' dm/ios/Sources/front_ios.m
           grep -q 'Prepare a game' dm/ios/Sources/ImportScreen.swift
@@ -334,16 +341,16 @@ jobs:
           if missing:
               raise SystemExit("Shader scanner contract missing: " + ", ".join(missing))
 
-          plan = """Cuphead shader investigation — immediate next steps
-          1. Inspect Shader objects across every discovered format-17 SerializedFile, not only Data/resources.assets.
-          2. On the iPhone, save bounded raw objects under Documents/PreparedGame/ShaderSources with source-specific filenames and one shared 32 MB extraction budget.
-          3. Compare each object's prefix, byte profile, binary signatures, marker hit counts, and printable strings sampled from the beginning, evenly spaced offsets, and end of the full object.
-          4. Use the combined shader inventory and distributed samples to identify likely Unity Shader metadata boundaries and candidate program records; do not treat string hits as proof of executable code.
-          5. Parse the confirmed serialized program records, extract Switch shader machine code and metadata, and build translator job JSON.
-          6. Run the embedded Ryujinx translator on-device, then compile generated Metal source with Apple's Metal compiler.
-          7. Verify the first real Cuphead shader output and preserve a copyable diagnostic report.
+          plan = """Cuphead shader investigation — next payload-decoding milestone
+          1. Preserve the v11 Unity 2017.4 ShaderProgram parser and its complete-record accounting; do not regress to first-N-only sampling.
+          2. Use the on-device B report's 14 code-length classes, distributed profiles, repeated prefixes, and FNV-1a fingerprints to select representative payloads from each distinct length/header family.
+          3. Decode the internal code-payload header field-by-field. Compare the 32-byte prefixes and nonzero regions across lengths, duplicate groups, and adjacent serialized records; record byte offsets and little-endian values rather than guessing field meanings.
+          4. Identify the platform-19 / GPU-program-type-26 encoding and instruction/container format from corroborating structural evidence. The current negative SPIR-V, DXBC, DXIL, MTLB, SHDR, and NVN signature checks do not identify the format.
+          5. Only after the encoding and stage semantics are established, implement a bounded decoder that validates lengths, offsets, and record boundaries and emits a reproducible decoded-payload report.
+          6. Keep the Ryujinx translator disconnected until a payload is positively identified as a supported input format; then run a known-good fixture before attempting a Cuphead shader.
+          7. Keep all game data and decoded payloads on the iPhone. Actions may compile the generic shell and validate source contracts only.
           
-          Current boundary: this workflow only validates source-code prerequisites. It does not access, upload, or convert any user game files or keys. Object inspection, extraction, and translation execute inside the iOS app sandbox.
+          Current boundary: this workflow does not access, upload, or convert user game files or keys. Payload inspection and decoding execute inside the iOS app sandbox. FNV-1a is a non-cryptographic fingerprint used for grouping, not proof of payload identity.
           """
           Path(sys.argv[2]).write_text(plan)
           print("Verified the multi-object Unity Shader extraction safeguards and local-only output contract.")
