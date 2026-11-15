@@ -11,6 +11,7 @@ enum OnDeviceMetalCompiler {
         case noMetalDevice
         case emptySource
         case missingFunction(String)
+        case fixture(String)
 
         var errorDescription: String? {
             switch self {
@@ -115,10 +116,7 @@ enum OnDeviceMetalCompiler {
     ) throws -> String {
         guard let device else { throw CompilerError.noMetalDevice }
         guard width > 0, height > 0, width <= 512, height <= 512 else {
-            throw CompilerError.emptySource
-        }
-        guard device.maxVertexBufferBindCount > 30 else {
-            throw CompilerError.missingFunction("Metal device has no free vertex-buffer slot 30")
+            throw CompilerError.fixture("render-target dimensions must be between 1 and 512 pixels")
         }
         guard let vertexFunction = vertexLibrary.makeFunction(name: vertexFunctionName) else {
             throw CompilerError.missingFunction(vertexFunctionName)
@@ -161,7 +159,7 @@ enum OnDeviceMetalCompiler {
             reflection: &reflection
         )
         guard let reflection else {
-            throw CompilerError.missingFunction("Metal pipeline reflection")
+            throw CompilerError.fixture("Metal did not return pipeline reflection")
         }
 
         var resourceSummary: [String] = []
@@ -176,7 +174,7 @@ enum OnDeviceMetalCompiler {
             switch argument.type {
             case .buffer:
                 guard argument.index != 30 else {
-                    throw CompilerError.missingFunction("Vertex resource uses reserved attribute buffer slot 30")
+                    throw CompilerError.fixture("vertex resource uses reserved attribute buffer slot 30")
                 }
                 let length = max(4096, argument.bufferDataSize)
                 guard let buffer = device.makeBuffer(length: length, options: .storageModeShared) else {
