@@ -258,6 +258,91 @@ enum UnityShaderSourceScanner {
     /// with no c1 tail. The translator receives the 0x50-byte SPH plus SASS bytes,
     /// exactly as its Maxwell job contract requires. Attribute/resource answers are
     /// deliberately left at the translator's documented defaults for this first probe.
+    static func makeNVNVertexSurveyJobs(preparedDirectory: URL) throws -> (jobFileURL: URL, outputDirectoryURL: URL, samples: [(key: String, sourceName: String, instructionBytes: Int, c1Bytes: Int)]) {
+        let root = preparedDirectory.appendingPathComponent("ShaderSources", isDirectory: true)
+        let manager = FileManager.default
+        guard manager.fileExists(atPath: root.path) else {
+            throw ScanError.invalidImage("No local shader samples were found. Run the shader inspection first.")
+        }
+        let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
+        var candidates: [URL] = []
+        while let url = enumerator?.nextObject() as? URL {
+            if url.pathExtension.lowercased() == "bin" &&
+               url.deletingLastPathComponent().lastPathComponent == "ProgramCode" {
+                candidates.append(url)
+            }
+        }
+        candidates.sort { $0.path < $1.path }
+
+        let outputDirectory = preparedDirectory.deletingLastPathComponent()
+            .appendingPathComponent("ShaderTranslatorVertexSurvey", isDirectory: true)
+        try? manager.removeItem(at: outputDirectory)
+        try manager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+
+        var jobs: [[String: Any]] = []
+        var samples: [(key: String, sourceName: String, instructionBytes: Int, c1Bytes: Int)] = []
+        for url in candidates {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true else { continue }
+            let size = values.fileSize ?? 0
+            guard size >= 16 + 0x850 + 0x80, size <= 8 * 1024 * 1024 else { continue }
+            let data = try Data(contentsOf: url, options: [.mappedIfSafe])
+            guard data.count == size else { continue }
+
+            let wrapperFlag = u32(data, 0)
+            let wrapperCodeLength = Int(u32(data, 12))
+            let controlLength = Int(u32(data, 8))
+            guard wrapperFlag <= 1, u32(data, 4) == 0, controlLength == 0x850,
+                  controlLength <= data.count - 16 else { continue }
+            let codeStart = 16 + controlLength
+            guard wrapperCodeLength == data.count - codeStart else { continue }
+            let control = data.subdata(in: 16..<codeStart)
+            let codeArea = data.subdata(in: codeStart..<data.count)
+            guard u32(control, 0) == 0x98761234,
+                  u32(control, 0x20) == UInt32(controlLength),
+                  u32(control, 0x708) == 0x30,
+                  u32(codeArea, 0) == 0x12345678 else { continue }
+
+            let declaredCodeSize = Int(u32(control, 0x704))
+            let c1Offset = Int(u32(control, 0x700))
+            guard declaredCodeSize == codeArea.count,
+                  c1Offset >= 0x80, c1Offset <= declaredCodeSize else { continue }
+
+            let sph = codeArea.subdata(in: 0x30..<0x80)
+            let sphWord0 = u32(sph, 0)
+            let sphType = sphWord0 & 0x1f
+            let sphVersion = (sphWord0 >> 5) & 0x1f
+            let shaderType = (sphWord0 >> 10) & 0x0f
+            let sassVersion = (sphWord0 >> 17) & 0x0f
+            guard sphType == 1, sphVersion == 3, shaderType == 1, sassVersion == 3 else { continue }
+
+            let instructionBytes = c1Offset - 0x80
+            guard instructionBytes >= 32, instructionBytes % 32 == 0 else { continue }
+            let program = codeArea.subdata(in: 0x30..<c1Offset)
+            let c1 = codeArea.subdata(in: c1Offset..<declaredCodeSize)
+            let key = url.deletingPathExtension().lastPathComponent
+            let codeURL = outputDirectory.appendingPathComponent(key + ".bin")
+            try program.write(to: codeURL, options: .atomic)
+            let job: [String: Any] = [
+                "key": key,
+                "stage": "vs",
+                "code": codeURL.path,
+                "c1": c1.map { String(format: "%02x", $0) }.joined(),
+                "debug": false
+            ]
+            jobs.append(job)
+            samples.append((key, url.lastPathComponent, instructionBytes, c1.count))
+        }
+
+        guard !jobs.isEmpty else {
+            throw ScanError.invalidImage("No supported Cuphead Maxwell vertex shaders were found for the translator survey.")
+        }
+        let jobData = try JSONSerialization.data(withJSONObject: jobs, options: [.prettyPrinted, .sortedKeys])
+        let jobURL = outputDirectory.appendingPathComponent("jobs.json")
+        try jobData.write(to: jobURL, options: .atomic)
+        return (jobURL, outputDirectory, samples)
+    }
+
     static func makeNVNVertexProbeJob(preparedDirectory: URL) throws -> (jobFileURL: URL, outputDirectoryURL: URL, sourceName: String, instructionBytes: Int) {
         let root = preparedDirectory.appendingPathComponent("ShaderSources", isDirectory: true)
         let manager = FileManager.default
