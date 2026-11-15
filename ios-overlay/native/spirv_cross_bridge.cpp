@@ -51,9 +51,6 @@ extern "C" NXN_EXPORT int nxn_spirv_to_msl_file(
     result = spvc_compiler_install_compiler_options(compiler, options);
     if (result != SPVC_SUCCESS) return fail(18, spvc_context_get_last_error_string(context));
 
-    const spvc_constant *constants = nullptr;
-    size_t constant_count = 0;
-    (void)constants; (void)constant_count;
     const char *msl = nullptr;
     result = spvc_compiler_compile(compiler, &msl);
     if (result != SPVC_SUCCESS || !msl) return fail(19, spvc_context_get_last_error_string(context));
