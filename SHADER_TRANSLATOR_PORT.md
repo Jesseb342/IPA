@@ -515,3 +515,42 @@ No successful Cuphead shader rendering is claimed.
 - NVIDIA, [CUDA Binary Utilities — Instruction Set Reference](https://docs.nvidia.com/cuda/archive/12.3.1/cuda-binary-utilities/index.html) — Maxwell/Pascal SASS instruction-set reference.
 - NervanaSystems, [Maxas Control Codes](https://github.com/NervanaSystems/maxas/wiki/Control-Codes) — Maxwell's one control word for each group of three instructions.
 - NX Native, [Shader format notes](https://nx-native.com/docs/reference/shaders) — NVN code/control layout and c1 placement.
+
+
+## Cuphead vertex survey — 95/95 translated; expanded reflection diagnostics — 2026-11-15
+
+The user ran the on-device batch survey against the current Cuphead extraction and reported:
+
+- 95 vertex jobs submitted.
+- 95 valid SPIR-V modules produced.
+- Zero failed or invalid outputs.
+- Translator exit code zero.
+- Aggregate translator reflection: 1 texture, 0 images, 103 constant-buffer entries, and 2 storage-buffer entries.
+- The eight highest-ranked samples include resource-bearing programs. The leading sample is Shader object 138, subprogram 12, with 1 texture and 2 constant buffers. Shader object 141, subprograms 8 and 9, each report 2 constant buffers and 1 storage buffer. Object 143 subprogram 2 and object 133 subprogram 2 are larger examples with 2 constant buffers each.
+- The two object-141 records are named as a duplicate in the survey output; confirm payload identity before treating them as distinct programs.
+
+This is strong evidence that the on-device Ryujinx translator can translate the surveyed Cuphead vertex programs into structurally valid SPIR-V. It does not establish correct attribute typing, correct descriptor/resource semantics, successful MSL generation, Metal compilation, or correct rendering. The aggregate resource totals count reflection entries across jobs; they are not counts of unique game resources.
+
+### Follow-on diagnostic implementation
+
+The survey/report path has been extended to make the next run more informative:
+
+1. **Unity record sidecars:** when the Unity 2017.4 SerializedProgram parser saves a program-code sample, it now saves adjacent JSON metadata containing the Shader object index, platform, chunk, subprogram index, record version, GPU program type, keyword count, and parsed keyword strings. The vertex survey copies a matching sidecar into its output directory.
+2. **SPIR-V interfaces:** the app now parses the generated SPIR-V instruction stream and reports vertex input/output variables, location decorations, built-ins, and their scalar/vector/matrix/array/struct type descriptions.
+3. **Descriptor inventory:** the report lists SPIR-V descriptor set/binding, storage class, variable name, and type.
+4. **Buffer layout:** for uniform/storage-buffer struct variables, the report lists member names, member indices, explicit byte offsets where present, and member types.
+5. **Translator resource details:** the top eight candidates now include the translator's individual texture, image, constant-buffer, and storage-buffer reflection records, rather than only counts, plus translator notes.
+
+The parser reports only the metadata it actually decodes. In particular, member offsets and types are not a complete ABI layout: array/matrix strides, every packing rule, and host-side binding correctness still need validation. The Unity sidecar ties a sample to its Shader object and subprogram index and preserves its keyword list; it does not yet identify a human-readable ShaderLab pass name or prove the exact pass/variant linkage.
+
+### Next manual test
+
+The new sidecars are generated during the Unity Shader-object inspection, so the existing extraction alone is not sufficient to populate them. Manually build and install the latest shell, then:
+
+1. Run **Inspect Unity Shader Objects** again against the already extracted Cuphead game. This regenerates the local program samples and their Unity metadata sidecars.
+2. Run **Survey all Cuphead vertex shaders**.
+3. Share the full survey report, especially unity_metadata_sidecars, unity_record, interface_input, interface_output, spirv_descriptor, spirv_buffer_layout, spirv_buffer_member, and resource_* lines.
+
+Use those records to determine whether the vertex input locations and numeric types can be recovered from the Maxwell SPH/SASS and Unity keyword/pass metadata, and whether the constant-buffer offsets agree with the host layout. Do not silently accept the translator's current float attribute fallback as authoritative. After the vertex interfaces and resource layouts are understood, proceed to SPIR-V-to-MSL and Metal compilation for selected representative shaders; only then expand to pixel shader translation.
+
+**Build status:** source changes are committed, but no Actions build has been dispatched and no new IPA has been built or tested with these diagnostics. The workflow remains manual (workflow_dispatch); commits do not trigger a build. All game files and generated shader data remain on the iPhone.
