@@ -632,3 +632,22 @@ The next fixture is now implemented as **Convert object 141 / subprogram 8 to MS
 Manually run **Build Universal NxNative Shell**, install the IPA, rerun **Inspect Unity Shader Objects** and **Survey all Cuphead vertex shaders**, then run the object-141 conversion button. Share the complete report, including any translator reflection and Metal diagnostics. Keep object 138's successful result as the regression baseline.
 
 **Build status:** source and workflow gates are committed only after repository writes succeed. No workflow is dispatched automatically or by this change. The new object-141 button and reporting path have not yet been built or tested on-device. Even if object 141 compiles, that will prove MSL/Metal library acceptance for a storage-buffer-bearing shader, not correct resource binding or rendering.
+
+
+## Cuphead Metal render-pipeline fixture validation — 2026-11-15
+
+Both resource-bearing Cuphead vertex fixtures have now passed MSL generation and Metal library compilation on the iPhone:
+
+- Object 138/subprogram 12: SPIR-V 12,104 bytes; MSL 6,316 bytes; Metal library created with `main0`.
+- Object 141/subprogram 8: SPIR-V 9,764 bytes; MSL 5,323 bytes; Metal library created with `main0`. Translator reflection reports two constant buffers and one storage buffer at binding 1 (slot 0, constant-buffer slot 0, offset 68). SPIR-V reflection identifies `vp_s0` as a runtime `u32` array with 4-byte stride.
+
+The next validation step is implemented in app source:
+
+1. After translated vertex MSL compiles into a library, the app attempts to create an actual `MTLRenderPipelineState` using `main0` as the vertex function and a minimal constant-color fragment function.
+2. The provisional vertex descriptor maps attribute 0 to `float4` at byte offset 0 and attribute 1 to `float4` at byte offset 16, with stride 32 and per-vertex stepping. These values mirror the current SPIR-V interface report; they are not claimed to be Cuphead's authoritative vertex-buffer format.
+3. The report separates successful library compilation from pipeline-state creation. A pipeline failure is reported without losing the successful SPIRV-Cross and Metal-library result.
+4. The report explicitly states that no real vertex buffers are bound and no draw is submitted.
+
+A successful pipeline-state creation proves that Metal accepts this vertex function with the test fragment stage and provisional input descriptor. It does not validate Cuphead's actual host-side vertex-buffer declarations, buffer contents, texture/sampler state, constant/storage-buffer contents, actual fragment shader pairing, or rendered output. Next, recover the Unity/NVN vertex declaration and host resource-binding ABI, then replace the provisional descriptor and add real buffer binding/draw validation.
+
+**Build status:** source, workflow syntax gates, and documentation are committed only after GitHub confirms the writes. No Actions workflow is dispatched by these commits; the user must manually run **Build Universal NxNative Shell**. The render-pipeline creation code has not yet been built or exercised on the iPhone.
