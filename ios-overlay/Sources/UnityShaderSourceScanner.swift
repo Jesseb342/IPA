@@ -190,7 +190,7 @@ enum UnityShaderSourceScanner {
                     let packed = sph[0x18 + index]
                     let components = (0..<4).map { (packed >> ($0 * 2)) & 0x03 }
                     if components.contains(where: { $0 != 0 }) {
-                        inputMap.append("\(index):" + components.map(String.init).joined(separator: ","))
+                        inputMap.append("\(index):" + components.map { String($0) }.joined(separator: ","))
                     }
                 }
             }
@@ -279,10 +279,13 @@ enum UnityShaderSourceScanner {
             let data = try Data(contentsOf: url, options: [.mappedIfSafe])
             guard data.count == size else { continue }
 
+            let wrapperFlag = u32(data, 0)
+            let wrapperCodeLength = Int(u32(data, 12))
             let controlLength = Int(u32(data, 8))
-            guard u32(data, 4) == 0, controlLength == 0x850,
+            guard wrapperFlag <= 1, u32(data, 4) == 0, controlLength == 0x850,
                   controlLength <= data.count - 16 else { continue }
             let codeStart = 16 + controlLength
+            guard wrapperCodeLength == data.count - codeStart else { continue }
             let control = data.subdata(in: 16..<codeStart)
             let codeArea = data.subdata(in: codeStart..<data.count)
             guard u32(control, 0) == 0x98761234,
@@ -297,8 +300,10 @@ enum UnityShaderSourceScanner {
 
             let sphWord0 = u32(codeArea, 0x30)
             let sphType = sphWord0 & 0x1f
+            let sphVersion = (sphWord0 >> 5) & 0x1f
             let shaderType = (sphWord0 >> 10) & 0x0f
-            guard sphType == 1, shaderType == 1 else { continue }
+            let sassVersion = (sphWord0 >> 17) & 0x0f
+            guard sphType == 1, sphVersion == 3, shaderType == 1, sassVersion == 3 else { continue }
             let instructionBytes = c1Offset - 0x80
             guard instructionBytes >= 32, instructionBytes % 32 == 0 else { continue }
             let program = codeArea.subdata(in: 0x30..<c1Offset)
