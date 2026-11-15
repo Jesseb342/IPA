@@ -171,7 +171,7 @@ enum OnDeviceMetalCompiler {
         var resources = FixtureResources()
         for argument in reflection.vertexArguments {
             guard argument.arrayLength == 1 else {
-                throw CompilerError.missingFunction("Unsupported resource array at vertex argument index \\(argument.index)")
+                throw CompilerError.missingFunction("Unsupported resource array at vertex argument index \(argument.index)")
             }
             switch argument.type {
             case .buffer:
@@ -183,8 +183,7 @@ enum OnDeviceMetalCompiler {
                     throw CompilerError.noMetalDevice
                 }
                 memset(buffer.contents(), 0, buffer.length)
-                pipelineDescriptor.label = "Cuphead offscreen execution fixture"
-                resourceSummary.append("buffer@\\(argument.index):\\(length)")
+                resourceSummary.append("buffer@\(argument.index):\(length)")
                 boundBuffers += 1
                 // The encoder is created below; retain the resource until binding.
                 resources.buffers[argument.index] = buffer
@@ -200,17 +199,21 @@ enum OnDeviceMetalCompiler {
                 textureDescriptor.arrayLength = argument.textureType == .typeCube ? 6 : max(1, argument.arrayLength)
                 textureDescriptor.usage = [.shaderRead]
                 guard let texture = device.makeTexture(descriptor: textureDescriptor) else {
-                    throw CompilerError.missingFunction("Could not allocate placeholder texture at index \\(argument.index), type \\(argument.textureType.rawValue)")
+                    throw CompilerError.missingFunction("Could not allocate placeholder texture at index \(argument.index), type \(argument.textureType.rawValue)")
                 }
-                var white: [UInt8] = [255, 255, 255, 255]
-                texture.replace(
-                    region: MTLRegionMake2D(0, 0, 1, 1),
-                    mipmapLevel: 0,
-                    withBytes: &white,
-                    bytesPerRow: 4
-                )
+                let white: [UInt8] = [255, 255, 255, 255]
+                white.withUnsafeBytes { bytes in
+                    if let base = bytes.baseAddress {
+                        texture.replace(
+                            region: MTLRegionMake2D(0, 0, 1, 1),
+                            mipmapLevel: 0,
+                            withBytes: base,
+                            bytesPerRow: 4
+                        )
+                    }
+                }
                 resources.textures[argument.index] = texture
-                resourceSummary.append("texture@\\(argument.index):\\(argument.textureType)")
+                resourceSummary.append("texture@\(argument.index):\(argument.textureType)")
                 boundTextures += 1
             case .sampler:
                 let samplerDescriptor = MTLSamplerDescriptor()
@@ -220,10 +223,10 @@ enum OnDeviceMetalCompiler {
                     throw CompilerError.noMetalDevice
                 }
                 resources.samplers[argument.index] = sampler
-                resourceSummary.append("sampler@\\(argument.index)")
+                resourceSummary.append("sampler@\(argument.index)")
                 boundSamplers += 1
             default:
-                throw CompilerError.missingFunction("Unsupported reflected vertex resource type \\(argument.type.rawValue) at index \\(argument.index)")
+                throw CompilerError.missingFunction("Unsupported reflected vertex resource type \(argument.type.rawValue) at index \(argument.index)")
             }
         }
 
@@ -270,7 +273,7 @@ enum OnDeviceMetalCompiler {
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
         guard commandBuffer.status == .completed, commandBuffer.error == nil else {
-            throw CompilerError.missingFunction("GPU command failed: \\(commandBuffer.error?.localizedDescription ?? String(describing: commandBuffer.status))")
+            throw CompilerError.missingFunction("GPU command failed: \(commandBuffer.error?.localizedDescription ?? String(describing: commandBuffer.status))")
         }
 
         let rowBytes = width * 4
@@ -295,15 +298,15 @@ enum OnDeviceMetalCompiler {
         }
         return [
             "gpu_draw|completed",
-            "draw_dimensions|\\(width)x\\(height)",
+            "draw_dimensions|\(width)x\(height)",
             "draw_primitives|triangle",
             "draw_vertex_count|3",
-            "draw_bound_vertex_resources|buffers=\\(boundBuffers),textures=\\(boundTextures),samplers=\\(boundSamplers)",
-            "draw_resource_bindings|\\(resourceSummary.isEmpty ? "none" : resourceSummary.sorted().joined(separator: ","))",
+            "draw_bound_vertex_resources|buffers=\(boundBuffers),textures=\(boundTextures),samplers=\(boundSamplers)",
+            "draw_resource_bindings|\(resourceSummary.isEmpty ? "none" : resourceSummary.sorted().joined(separator: ","))",
             "draw_readback|success",
-            "draw_nonclear_pixels|\\(nonClearPixels)",
+            "draw_nonclear_pixels|\(nonClearPixels)",
             "draw_scope|synthetic vertex data and placeholder resources; not Cuphead's real buffers or textures"
-        ].joined(separator: "\\n")
+        ].joined(separator: "\n")
     }
 
     private struct FixtureResources {
