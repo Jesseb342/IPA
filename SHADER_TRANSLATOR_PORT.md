@@ -492,6 +492,7 @@ The next engineering task after that test is to compare the translator's reflect
 ### References
 
 - NVIDIA, [Shader Program Header Specification](https://nvidia.github.io/open-gpu-doc/Shader-Program-Header/Shader-Program-Header.html) — SPH CommonWord0, stage values, and stage-specific interface layouts.
+- devkitPro, [uam source/nv_shader_header.h](https://github.com/devkitPro/uam/blob/5a5afc2bae8b55409ab36ba45be63fcb73f68993/source/nv_shader_header.h) — explicit VTG/PS and vertex/pixel enum values, plus the packed 80-byte structure.
 - NVIDIA, [CUDA Binary Utilities — Instruction Set Reference](https://docs.nvidia.com/cuda/archive/12.3.1/cuda-binary-utilities/index.html) — Maxwell/Pascal SASS instruction-set reference.
 - NervanaSystems, [Maxas Control Codes](https://github.com/NervanaSystems/maxas/wiki/Control-Codes) — Maxwell's one control word for each group of three instructions.
 - NX Native, [Shader format notes](https://nx-native.com/docs/reference/shaders) — NVN code/control layout and c1 placement.
