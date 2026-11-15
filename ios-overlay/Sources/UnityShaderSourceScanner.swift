@@ -79,8 +79,9 @@ enum UnityShaderSourceScanner {
 
     /// Validates the Unity 2017 NVN program wrapper and splits each graphics sample
     /// into the control section, 0x30-byte NVN code header, SPH+instructions, and c1.
-    /// The output remains a local, user-exported diagnostic archive; it is not sent
-    /// to the translator because stage/resource metadata is not yet resolved.
+    /// The output remains a local, user-exported diagnostic archive; this split action
+    /// does not invoke the translator. Stage is decoded from SPH, while resource types
+    /// still require additional evidence before production translation.
     static func makeNVNSplitExport(preparedDirectory: URL) throws -> URL {
         let root = preparedDirectory.appendingPathComponent("ShaderSources", isDirectory: true)
         let manager = FileManager.default
