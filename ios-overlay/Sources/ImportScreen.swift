@@ -1058,6 +1058,16 @@ private struct ImportDocumentPicker: UIViewControllerRepresentable {
     }
 }
 
+private struct ShaderSampleActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
 private struct ImportScreenView: View {
     @State private var base: ImportedGameFile?
     @State private var keys: ImportedGameFile?
@@ -1079,6 +1089,9 @@ private struct ImportScreenView: View {
     @State private var shaderTranslatorLog = ""
     @State private var scanningShaderSources = false
     @State private var shaderSourceScanLog = ""
+    @State private var exportingShaderSamples = false
+    @State private var shaderSampleExportURL: URL?
+    @State private var showingShaderSampleShare = false
     @State private var disassemblingModules = false
     @State private var disassemblyLog = ""
     @State private var functionOffset = "00000038"
@@ -1136,6 +1149,16 @@ private struct ImportScreenView: View {
                             }
                         }
                         if !shaderSourceScanLog.isEmpty {
+                            Button {
+                                Task { await exportShaderSamples() }
+                            } label: {
+                                Label(exportingShaderSamples ? "Preparing sample bundle…" : "Export raw shader samples",
+                                      systemImage: "square.and.arrow.up")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(exportingShaderSamples || scanningShaderSources)
                             HStack {
                                 Text("Shader scan report")
                                     .font(.caption)
@@ -1536,6 +1559,11 @@ private struct ImportScreenView: View {
                 )
                 .ignoresSafeArea()
             }
+            .sheet(isPresented: $showingShaderSampleShare) {
+                if let shaderSampleExportURL {
+                    ShaderSampleActivityView(activityItems: [shaderSampleExportURL])
+                }
+            }
             .onAppear(perform: loadSavedFiles)
         }
         .preferredColorScheme(.dark)
@@ -1802,6 +1830,23 @@ private struct ImportScreenView: View {
             shaderSourceScanLog = report
         } catch {
             shaderSourceScanLog = "scan_failed|\(error.localizedDescription)"
+        }
+    }
+
+    private func exportShaderSamples() async {
+        guard gameExtracted, !exportingShaderSamples else { return }
+        exportingShaderSamples = true
+        defer { exportingShaderSamples = false }
+        let prepared = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PreparedGame", isDirectory: true)
+        do {
+            let url = try await Task.detached(priority: .userInitiated) {
+                try UnityShaderSourceScanner.makeSampleExport(preparedDirectory: prepared)
+            }.value
+            shaderSampleExportURL = url
+            showingShaderSampleShare = true
+        } catch {
+            shaderSourceScanLog += "\nexport_failed|\(error.localizedDescription)\n"
         }
     }
 
