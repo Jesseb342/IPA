@@ -421,3 +421,75 @@ The manifest preserves the wrapper flag and raw +0x708 value without assigning u
 5. Then resolve stage identity and resource metadata from Unity's surrounding serialized ShaderProgram/pass/variant structures before creating a real translator job.
 
 No shader translation, SPIR-V output, Metal compilation, or Cuphead rendering has yet been demonstrated.
+
+
+## Cuphead SPH decode and first translator probe — 2026-11-15
+
+The uploaded on-device UnityShaderNVNSplits.nvnsplit archive was parsed independently. All 342 split entries validate, and reconstructing the original 64 wrapped program records from their split components produces byte-for-byte equality for all 64. No data was lost or reordered by the splitter.
+
+### SPH CommonWord0 resolves the shader stages
+
+The 0x50-byte SPH at the start of each translator program is the NVIDIA Maxwell Shader Program Header. NVIDIA's published SPH specification defines CommonWord0 as:
+
+- bits 0–4: SphType (1 = VTG, 2 = pixel shader);
+- bits 5–9: SPH Version;
+- bits 10–13: ShaderType (1 = vertex, 5 = pixel);
+- bit 14: MrtEnable;
+- bit 15: KillsPixels;
+- bits 17–20: SassVersion.
+
+Observed values in the 64 Cuphead samples:
+
+| CommonWord0 | Count | Decoded stage and flags |
+|---|---:|---|
+| 0x02060461 | 28 | VTG, version 3, vertex, SASS version 3 |
+| 0x00065462 | 33 | Pixel, version 3, pixel, MRT enabled, SASS version 3 |
+| 0x0006D462 | 3 | Pixel, version 3, pixel, MRT enabled, kills-pixels enabled, SASS version 3 |
+
+This gives **28 vertex and 36 pixel/fragment programs**. The wrapper flag is 0 on all 28 vertex samples and 1 on all 36 pixel samples, but the implementation continues to preserve it as raw metadata rather than treating that correlation as its definition.
+
+The stage is now established from the SPH itself. This supersedes the earlier note that stage identity was unresolved.
+
+### Stage-specific interface fields
+
+- All 36 pixel samples have OmapTarget[0] = 0xF, meaning RGBA components are enabled for color target 0. The pixel output flags at SPH +0x4C are zero in all 36 samples (sample-mask and depth outputs are not enabled).
+- Three of the 36 pixel samples set KillsPixels; the other 33 do not.
+- Pixel generic input maps contain 10 distinct patterns. Every active component in these maps uses interpolation mode 2 (Perspective), according to NVIDIA's PixelImap enum.
+- Vertex generic input/output maps contain 9 distinct input/output map pairs. The maps encode active generic attribute components; they are not a substitute for the actual integer/float attribute-type answers required by the translator.
+- CommonWord1 through CommonWord4 are zero in all 64 samples. These fields cover local-memory sizes, per-patch/thread counts, geometry output topology/vertex count, and store-request ranges.
+
+The 0x30-byte NVN code header is also uniform in this corpus: graphics magic 0x12345678 followed by zero bytes.
+
+### Instruction payload is Maxwell SASS v3
+
+Every one of the 64 instruction areas has a length divisible by 32 bytes. Across the archive there are 2,800 such 32-byte bundles (11,200 64-bit words total). The Maxwell/Pascal pre-Volta SASS layout uses one 64-bit scheduling/control word followed by three 64-bit instruction words in each bundle. This matches the observed alignment and the SPH's SassVersion=3 field.
+
+The instruction data is therefore not SPIR-V, DXBC, DXIL, Metal library data, or NVN wrapper metadata. It is the native Maxwell SASS stream expected by the existing Ryujinx translator path. The translator job's code file must contain the 0x50-byte SPH followed by the SASS instructions; it must not include the leading 0x30-byte NVN code header. A non-empty c1 tail is supplied separately in the job's c1 field.
+
+### First on-device translation test added
+
+The import screen now has **Translate one Cuphead vertex shader**. It:
+
+1. checks the embedded Ryujinx translator's native probe;
+2. selects the smallest bounded vertex sample with an empty c1 tail and complete SASS bundles;
+3. writes the exact 0x50-byte SPH plus SASS instruction stream into Documents/ShaderTranslatorProbe;
+4. creates a one-job JSON file with stage vs and invokes nxn_translate_shader_jobs;
+5. validates that the output is a SPIR-V module and reports the translator's resource reflection and diagnostic notes.
+
+For this first diagnostic only, resource answers are intentionally left at the translator's defaults: vertex attributes default to float, unknown texture types default to 2D, and unknown image formats default to RGBA8 UNORM. A successful SPIR-V output proves the Cuphead code passed through the translator; it does not prove those fallback resource types are correct, nor does it prove Metal compilation or game rendering.
+
+### Next manual test
+
+1. Run **Build Universal NxNative Shell** manually from the latest main; no workflow is dispatched automatically by a commit.
+2. Install the new IPA and open the extracted Cuphead game in the app.
+3. Tap **Translate one Cuphead vertex shader**.
+4. Share the resulting translation report. If translation succeeds, inspect its reflection and notes before attempting pixel shaders or a Metal pipeline.
+
+The next engineering task after that test is to compare the translator's reflected constant buffers, textures, images, and vertex inputs with Unity's serialized ShaderProgram/pass/variant metadata. Do not assume the fallback answers are game-correct. No successful Cuphead shader translation, Metal shader compilation, or Cuphead rendering is claimed until the on-device report demonstrates it.
+
+### References
+
+- NVIDIA, [Shader Program Header Specification](https://nvidia.github.io/open-gpu-doc/Shader-Program-Header/Shader-Program-Header.html) — SPH CommonWord0, stage values, and stage-specific interface layouts.
+- NVIDIA, [CUDA Binary Utilities — Instruction Set Reference](https://docs.nvidia.com/cuda/archive/12.3.1/cuda-binary-utilities/index.html) — Maxwell/Pascal SASS instruction-set reference.
+- NervanaSystems, [Maxas Control Codes](https://github.com/NervanaSystems/maxas/wiki/Control-Codes) — Maxwell's one control word for each group of three instructions.
+- NX Native, [Shader format notes](https://nx-native.com/docs/reference/shaders) — NVN code/control layout and c1 placement.
