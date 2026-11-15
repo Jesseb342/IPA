@@ -169,7 +169,7 @@ enum UnityShaderSourceScanner {
             }
 
             manifestLines.append(
-                "sample|\(base)|wrapper_flag=\(wrapperFlag)|control_bytes=\(controlLength)|code_area_bytes=\(codeLength)|c1_offset=0x\(String(c1Offset, radix: 16))|c1_bytes=\(c1.count)|code_header_bytes=\(codeHeaderBytes)|sph_bytes=\(sph.count)|instruction_bytes=\(instructions.count)|control_708_raw=0x\(String(u32(control, 0x708), radix: 16))"
+                "sample|\(base)|wrapper_flag=\(wrapperFlag)|control_bytes=\(controlLength)|code_area_bytes=\(codeLength)|c1_offset=0x\(String(c1Offset, radix: 16))|c1_bytes=\(c1.count)|code_header_bytes=\(codeHeader.count)|sph_bytes=\(sph.count)|instruction_bytes=\(instructions.count)|control_708_raw=0x\(String(u32(control, 0x708), radix: 16))"
             )
             sampleCount += 1
             sourceBytes += data.count
