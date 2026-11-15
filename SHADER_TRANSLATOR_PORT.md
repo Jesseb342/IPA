@@ -703,7 +703,7 @@ Both object 138/subprogram 12 and object 141/subprogram 8 have now passed on-dev
 The test:
 
 1. Builds the same provisional two-`float4` vertex descriptor, but places vertex attributes in Metal buffer slot 30 to keep them separate from reflected shader resources.
-2. Requests Metal render-pipeline reflection and inspects the vertex-stage arguments.
+2. Requests Metal render-pipeline reflection and inspects the modern iOS 16+ `MTLBinding` interfaces (`vertexBindings`, `MTLBufferBinding`, and `MTLTextureBinding`) rather than relying on deprecated `MTLArgument` reflection.
 3. Allocates zero-filled shared buffers for reflected buffer arguments, a white 1×1 placeholder texture for reflected texture arguments, and default samplers for sampler arguments. Unsupported resource arrays or resource types fail with an explicit diagnostic rather than being silently skipped. Reflected argument index 30 is rejected because it conflicts with the reserved vertex-data slot.
 4. Creates a 64×64 shared BGRA render target, supplies three synthetic interleaved float4/float4 vertices, binds reflected placeholder resources, submits one triangle draw, waits for command-buffer completion, and reads the target pixels back.
 5. Reports GPU command completion, resource counts/binding indices, readback status, and the number of non-clear pixels. Zero non-clear pixels is reported rather than misrepresented as a visible successful triangle.
