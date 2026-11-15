@@ -476,7 +476,7 @@ The import screen now has **Translate one Cuphead vertex shader**. It:
 2. selects the smallest bounded vertex sample with an empty c1 tail and complete SASS bundles;
 3. writes the exact 0x50-byte SPH plus SASS instruction stream into Documents/ShaderTranslatorProbe;
 4. creates a one-job JSON file with stage vs and invokes nxn_translate_shader_jobs;
-5. validates that the output is a SPIR-V module and reports the translator's resource reflection and diagnostic notes.
+5. validates that the output is a SPIR-V module and reports the translator's resource reflection and diagnostic notes. On failure, the translator writes a per-shader .error.txt file with the exception detail and stack trace, which the app surfaces in its report.
 
 For this first diagnostic only, resource answers are intentionally left at the translator's defaults: vertex attributes default to float, unknown texture types default to 2D, and unknown image formats default to RGBA8 UNORM. A successful SPIR-V output proves the Cuphead code passed through the translator; it does not prove those fallback resource types are correct, nor does it prove Metal compilation or game rendering.
 
