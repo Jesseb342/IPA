@@ -1090,6 +1090,7 @@ private struct ImportScreenView: View {
     @State private var scanningShaderSources = false
     @State private var shaderSourceScanLog = ""
     @State private var exportingShaderSamples = false
+    @State private var exportingNVNSplitSamples = false
     @State private var shaderSampleExportURL: URL?
     @State private var showingShaderSampleShare = false
     @State private var disassemblingModules = false
@@ -1158,7 +1159,17 @@ private struct ImportScreenView: View {
                                     .padding(.vertical, 8)
                             }
                             .buttonStyle(.bordered)
-                            .disabled(exportingShaderSamples || scanningShaderSources)
+                            .disabled(exportingShaderSamples || exportingNVNSplitSamples || scanningShaderSources)
+                            Button {
+                                Task { await exportNVNSplitSamples() }
+                            } label: {
+                                Label(exportingNVNSplitSamples ? "Validating and splitting…" : "Validate & split NVN graphics",
+                                      systemImage: "scissors")
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(exportingNVNSplitSamples || exportingShaderSamples || scanningShaderSources)
                             HStack {
                                 Text("Shader scan report")
                                     .font(.caption)
@@ -1847,6 +1858,23 @@ private struct ImportScreenView: View {
             showingShaderSampleShare = true
         } catch {
             shaderSourceScanLog += "\nexport_failed|\(error.localizedDescription)\n"
+        }
+    }
+
+    private func exportNVNSplitSamples() async {
+        guard gameExtracted, !exportingNVNSplitSamples else { return }
+        exportingNVNSplitSamples = true
+        defer { exportingNVNSplitSamples = false }
+        let prepared = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("PreparedGame", isDirectory: true)
+        do {
+            let url = try await Task.detached(priority: .userInitiated) {
+                try UnityShaderSourceScanner.makeNVNSplitExport(preparedDirectory: prepared)
+            }.value
+            shaderSampleExportURL = url
+            showingShaderSampleShare = true
+        } catch {
+            shaderSourceScanLog += "\\nnvn_split_failed|\\(error.localizedDescription)\\n"
         }
     }
 
