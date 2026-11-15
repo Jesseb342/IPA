@@ -14,20 +14,24 @@ enum UnityShaderSourceScanner {
             throw ScanError.invalidImage("No local shader samples were found. Run the shader inspection first.")
         }
         let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
+        var candidateURLs: [URL] = []
+        while let url = enumerator?.nextObject() as? URL {
+            if url.pathExtension.lowercased() == "bin" { candidateURLs.append(url) }
+        }
+        candidateURLs.sort { $0.path < $1.path }
         var samples: [(name: String, data: Data)] = []
         var totalBytes = 0
-        while let url = enumerator?.nextObject() as? URL {
-            guard url.pathExtension.lowercased() == "bin" else { continue }
+        for url in candidateURLs {
+            guard samples.count < 64 else { break }
             let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true else { continue }
             let size = values.fileSize ?? 0
-            guard size > 0, samples.count < 64, size <= 8 * 1024 * 1024 - totalBytes else { continue }
+            guard size > 0, size <= 8 * 1024 * 1024 - totalBytes else { continue }
             let data = try Data(contentsOf: url, options: [.mappedIfSafe])
             guard data.count == size else { continue }
             samples.append((url.lastPathComponent, data))
             totalBytes += data.count
         }
-        samples.sort { $0.name < $1.name }
         guard !samples.isEmpty else {
             throw ScanError.invalidImage("No bounded shader program samples are available to export.")
         }
@@ -76,6 +80,10 @@ enum UnityShaderSourceScanner {
     }
 
     static func scan(preparedDirectory: URL) throws -> String {
+        // A new scan replaces prior forensic samples so exports cannot mix stale
+        // payloads from earlier scanner revisions or different game imports.
+        let previousSamples = preparedDirectory.appendingPathComponent("ShaderSources", isDirectory: true)
+        try? FileManager.default.removeItem(at: previousSamples)
         let imageURL = preparedDirectory.appendingPathComponent("RomFS.img")
         let attributes = try FileManager.default.attributesOfItem(atPath: imageURL.path)
         let imageSize = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
@@ -157,7 +165,7 @@ enum UnityShaderSourceScanner {
         ]
         var shaderForensicBudgetRemaining = 32 * 1024 * 1024
         var report: [String] = [
-            "unityfs_scanner_revision|unity2017-shader-payload-profile-v11-distributed",
+            "unityfs_scanner_revision|unity2017-shader-payload-profile-v12-representative",
             "scan_id|\(UUID().uuidString)",
             "scan_started_utc|\(ISO8601DateFormatter().string(from: Date()))",
             "unityfs_inspection|lz4_block_info_and_node_inventory",
