@@ -53,6 +53,54 @@ enum OnDeviceMetalCompiler {
         return try device.makeComputePipelineState(function: function)
     }
 
+    /// Create a render-pipeline state around a translated vertex function.
+    ///
+    /// The two float4 attributes mirror current SPIR-V reflection only. Their
+    /// actual Cuphead vertex-buffer formats and stride remain unverified.
+    /// This validates pipeline compatibility; it does not submit a draw.
+    static func createFixtureRenderPipeline(
+        vertexLibrary: MTLLibrary,
+        vertexFunctionName: String,
+        device: MTLDevice? = MTLCreateSystemDefaultDevice()
+    ) throws -> MTLRenderPipelineState {
+        guard let device else { throw CompilerError.noMetalDevice }
+        guard let vertexFunction = vertexLibrary.makeFunction(name: vertexFunctionName) else {
+            throw CompilerError.missingFunction(vertexFunctionName)
+        }
+
+        let fragmentSource = """
+        #include <metal_stdlib>
+        using namespace metal;
+        fragment float4 nxn_fixture_fragment() {
+            return float4(1.0, 1.0, 1.0, 1.0);
+        }
+        """
+        let fragmentLibrary = try compile(source: fragmentSource, device: device)
+        guard let fragmentFunction = fragmentLibrary.makeFunction(name: "nxn_fixture_fragment") else {
+            throw CompilerError.missingFunction("nxn_fixture_fragment")
+        }
+
+        let vertexDescriptor = MTLVertexDescriptor()
+        vertexDescriptor.attributes[0].format = .float4
+        vertexDescriptor.attributes[0].offset = 0
+        vertexDescriptor.attributes[0].bufferIndex = 0
+        vertexDescriptor.attributes[1].format = .float4
+        vertexDescriptor.attributes[1].offset = 16
+        vertexDescriptor.attributes[1].bufferIndex = 0
+        vertexDescriptor.layouts[0].stride = 32
+        vertexDescriptor.layouts[0].stepFunction = .perVertex
+        vertexDescriptor.layouts[0].stepRate = 1
+
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.label = "Cuphead translated vertex fixture"
+        descriptor.vertexFunction = vertexFunction
+        descriptor.fragmentFunction = fragmentFunction
+        descriptor.vertexDescriptor = vertexDescriptor
+        descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        descriptor.sampleCount = 1
+        return try device.makeRenderPipelineState(descriptor: descriptor)
+    }
+
     /// Save translated MSL as a local cache input. The source is retained so
     /// the app can rebuild its Metal library after an app restart or OS update.
     @discardableResult
