@@ -1081,8 +1081,8 @@ enum UnityShaderSourceScanner {
         var codeRecords = 0
         var savedRecords = 0
         var savedBytes = 0
-        var selectedPayloadsByLength: [Int: (index: Int, payload: [UInt8], hash: String)] = [:]
-        var duplicatePayloadSample: (index: Int, length: Int, payload: [UInt8], hash: String)?
+        var selectedPayloadsByLength: [Int: (index: Int, programType: Int32, payload: [UInt8], hash: String)] = [:]
+        var duplicatePayloadSample: (index: Int, length: Int, programType: Int32, payload: [UInt8], hash: String)?
         var failures = 0
         var typeCounts: [Int32: Int] = [:]
         var lengthCounts: [Int: Int] = [:]
@@ -1204,14 +1204,14 @@ enum UnityShaderSourceScanner {
                 if selectedPayloadsByLength[codeLength] == nil,
                    selectedPayloadsByLength.count < maxSavedRecords,
                    codeLength <= maxSavedBytes - savedBytes {
-                    selectedPayloadsByLength[codeLength] = (index, payload, payloadHash)
+                    selectedPayloadsByLength[codeLength] = (index, programType, payload, payloadHash)
                     savedBytes += codeLength
                 } else if duplicatePayloadSample == nil,
                           selectedPayloadsByLength.values.contains(where: { $0.hash == payloadHash }),
                           codeLength <= maxSavedBytes - savedBytes {
                     // One exact duplicate is useful for distinguishing record metadata
                     // from payload bytes without exporting every repeated record.
-                    duplicatePayloadSample = (index, codeLength, payload, payloadHash)
+                    duplicatePayloadSample = (index, codeLength, programType, payload, payloadHash)
                     savedBytes += codeLength
                 }
             }
@@ -1222,7 +1222,7 @@ enum UnityShaderSourceScanner {
         for (length, sample) in selectedPayloadsByLength.sorted(by: { $0.key < $1.key }) {
             guard savedRecords < maxSavedRecords else { break }
             let codeURL = codeDirectory.appendingPathComponent(
-                "\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(sample.index)-t\(programType)-len\(length).bin"
+                "\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(sample.index)-t\(sample.programType)-len\(length).bin"
             )
             do {
                 try Data(sample.payload).write(to: codeURL, options: .atomic)
@@ -1232,7 +1232,7 @@ enum UnityShaderSourceScanner {
         var savedDuplicate = false
         if let duplicate = duplicatePayloadSample, savedRecords < maxSavedRecords {
             let duplicateURL = codeDirectory.appendingPathComponent(
-                "\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(duplicate.index)-t\(programType)-duplicate.bin"
+                "\(outputBaseName)-p\(platform)-c\(chunkIndex)-s\(duplicate.index)-t\(duplicate.programType)-duplicate.bin"
             )
             do {
                 try Data(duplicate.payload).write(to: duplicateURL, options: .atomic)
