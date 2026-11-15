@@ -69,8 +69,10 @@ extern "C" NXN_EXPORT int nxn_spirv_to_msl_file(
     if (log) {
         unsigned major = 0, minor = 0, patch = 0;
         spvc_get_version(&major, &minor, &patch);
+        const char *revision = spvc_get_commit_revision_and_timestamp();
         log << "status|msl_generated\n"
-            << "spirv_cross_version|" << major << "." << minor << "." << patch << "\n"
+            << "spirv_cross_c_api_version|" << major << "." << minor << "." << patch << "\n"
+            << "spirv_cross_revision|" << (revision ? revision : "unavailable") << "\n"
             << "backend|MSL\n"
             << "msl_version|2.3.0\n"
             << "input_bytes|" << words.size() * sizeof(uint32_t) << "\n";
