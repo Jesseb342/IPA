@@ -1203,6 +1203,8 @@ private struct ImportScreenView: View {
     @State private var metalCompilerLog = ""
     @State private var testingShaderTranslator = false
     @State private var shaderTranslatorLog = ""
+    @State private var testingCupheadMetalShader = false
+    @State private var cupheadMetalShaderLog = ""
     @State private var scanningShaderSources = false
     @State private var shaderSourceScanLog = ""
     @State private var exportingShaderSamples = false
@@ -1500,6 +1502,31 @@ private struct ImportScreenView: View {
                     }
                     if !shaderTranslatorLog.isEmpty {
                         Text(shaderTranslatorLog)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                    }
+
+                    if gameExtracted {
+                        Button {
+                            Task { await convertCupheadVertexShaderToMetal() }
+                        } label: {
+                            Label(testingCupheadMetalShader ? "Converting and compiling object 138…" : "Convert object 138 to MSL + Metal",
+                                  systemImage: "cpu")
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(testingCupheadMetalShader || testingShaderTranslator || extracting || rewritingModules)
+                    }
+                    if testingCupheadMetalShader {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Generating MSL and compiling it with Metal…").foregroundStyle(.secondary)
+                        }
+                    }
+                    if !cupheadMetalShaderLog.isEmpty {
+                        Text(cupheadMetalShaderLog)
                             .font(.system(.caption2, design: .monospaced))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
@@ -2121,6 +2148,44 @@ private struct ImportScreenView: View {
             shaderTranslatorLog = "survey_failed|\(error.localizedDescription)"
         }
     }
+    private func convertCupheadVertexShaderToMetal() async {
+        testingCupheadMetalShader = true
+        cupheadMetalShaderLog = ""
+        defer { testingCupheadMetalShader = false }
+
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let survey = documents.appendingPathComponent("ShaderTranslatorVertexSurvey", isDirectory: true)
+        let key = "data-resources-assets-shader-object-138-p19-c0-s12-t26-len3936"
+        let spirv = survey.appendingPathComponent(key + ".spv")
+        let msl = survey.appendingPathComponent(key + ".metal")
+        let diagnostics = survey.appendingPathComponent(key + ".spirv-cross.txt")
+        do {
+            let result = try await Task.detached(priority: .userInitiated) {
+                try SPIRVCrossBridge.convert(input: spirv, output: msl, diagnostics: diagnostics)
+                let source = try String(contentsOf: msl, encoding: .utf8)
+                let library = try OnDeviceMetalCompiler.compile(source: source)
+                let names = library.functionNames.sorted()
+                let diagnosticText = (try String(contentsOf: diagnostics, encoding: .utf8))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "\n", with: "; ")
+                return [
+                    "sample|\(key)",
+                    "spirv_bytes|\((try Data(contentsOf: spirv)).count)",
+                    "msl_bytes|\((try Data(contentsOf: msl)).count)",
+                    "spirv_cross|\(diagnosticText)",
+                    "metal_compile|success",
+                    "metal_functions|\(names.isEmpty ? "none reported" : names.joined(separator: ","))",
+                    "metal_library|created",
+                    "scope|vertex library compilation only; no render pipeline or game rendering tested"
+                ].joined(separator: "\n")
+            }.value
+            cupheadMetalShaderLog = result
+        } catch {
+            let diagnostic = (try? String(contentsOf: diagnostics, encoding: .utf8)) ?? ""
+            cupheadMetalShaderLog = "failed|\(error.localizedDescription)" + (diagnostic.isEmpty ? "" : "\nspirv_cross_diagnostics|\(diagnostic)")
+        }
+    }
+
     private func testOnDeviceMetalCompiler() async {
         testingMetalCompiler = true
         metalCompilerLog = ""
