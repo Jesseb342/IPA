@@ -371,6 +371,7 @@ jobs:
           grep -q 'render_pipeline|created' dm/ios/Sources/ImportScreen.swift
           grep -q 'pipeline_vertex_layout' dm/ios/Sources/ImportScreen.swift
           swiftc -frontend -parse dm/ios/Sources/OnDeviceMetalCompiler.swift
+          swiftc -frontend -parse dm/ios/Sources/ImportScreen.swift
           grep -q 'enum SPIRVCrossBridge' dm/ios/Sources/SPIRVCrossBridge.swift
           grep -q 'nxn_spirv_to_msl_file' dm/ios/Sources/SPIRVCrossBridge.swift
           swiftc -frontend -parse dm/ios/Sources/SPIRVCrossBridge.swift
