@@ -278,7 +278,7 @@ jobs:
           echo "UnityFS scanner copied SHA256:"
           shasum -a 256 dm/ios/Sources/UnityShaderSourceScanner.swift
           cmp ipa-overlay/ios-overlay/Sources/UnityShaderSourceScanner.swift dm/ios/Sources/UnityShaderSourceScanner.swift
-          grep -q 'unityfs_scanner_revision|unity2017-shader-payload-profile-v11-distributed' dm/ios/Sources/UnityShaderSourceScanner.swift
+          grep -q 'unityfs_scanner_revision|unity2017-shader-payload-profile-v12-representative' dm/ios/Sources/UnityShaderSourceScanner.swift
           # The v11 report must profile every parsed code record, sample across
           # the complete record range, and fingerprint payloads without uploading them.
           grep -q 'sample_strategy=evenly_spaced_record_indices' dm/ios/Sources/UnityShaderSourceScanner.swift
