@@ -16,7 +16,12 @@ enum UnityShaderSourceScanner {
         let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
         var candidateURLs: [URL] = []
         while let url = enumerator?.nextObject() as? URL {
-            if url.pathExtension.lowercased() == "bin" { candidateURLs.append(url) }
+            // Only export files inside ProgramCode directories. Shader object dumps
+            // elsewhere under ShaderSources are intentionally excluded.
+            if url.pathExtension.lowercased() == "bin" &&
+               url.deletingLastPathComponent().lastPathComponent == "ProgramCode" {
+                candidateURLs.append(url)
+            }
         }
         candidateURLs.sort { $0.path < $1.path }
         var samples: [(name: String, data: Data)] = []
