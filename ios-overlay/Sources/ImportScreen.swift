@@ -2247,7 +2247,7 @@ private struct ImportScreenView: View {
                         let detail = error.localizedDescription
                             .replacingOccurrences(of: "|", with: "_")
                             .replacingOccurrences(of: "\n", with: " ")
-                        return ("render_pipeline|failed", "render_pipeline_error|\\(detail)")
+                        return ("render_pipeline|failed", "render_pipeline_error|\(detail)")
                     }
                 }()
                 let diagnosticText = (try String(contentsOf: diagnostics, encoding: .utf8))
