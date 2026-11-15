@@ -596,3 +596,21 @@ Separately, resolve vertex attribute formats from Maxwell vertex-input metadata 
 
 **Verification status:** C is a successful on-device translation/reflection report. It contains no SPIRV-Cross output or Metal compilation result; neither stage is yet verified.
 
+
+
+## SPIR-V to MSL and on-device Metal compilation implementation — 2026-11-15
+
+The next stage is now implemented in source, using the successful object 138/subprogram 12 fixture from report C:
+
+1. **SPIRV-Cross native bridge:** \`ios-overlay/native/spirv_cross_bridge.cpp\` reads a bounded binary SPIR-V module, validates its magic and word alignment, creates a SPIRV-Cross C API context, selects the MSL backend, targets MSL 2.3, and writes generated MSL plus version/revision diagnostics. It does not alter the original SPIR-V or reflection JSON.
+2. **iOS ARM64 build:** the manual shell workflow checks out the pinned Khronos Vulkan SDK SPIRV-Cross release tag, builds its static C API/MSL dependencies for iOS ARM64, links them into \`NxNativeSPIRVCross.framework\`, verifies the exported bridge symbol and architecture, embeds and signs the framework, and verifies it is present in the IPA.
+3. **Swift bridge:** \`SPIRVCrossBridge.swift\` loads the embedded framework on-device and calls the exported file conversion function. Input and output paths are constrained to the app's Documents directory. The loader is synchronized and retained for the app lifetime.
+4. **Cuphead fixture action:** the import screen adds **Convert object 138 to MSL + Metal**. It reads the already generated SPIR-V for object 138/subprogram 12, writes the MSL and SPIRV-Cross diagnostics alongside the survey outputs, then passes the MSL to the existing on-device Metal compiler and reports the compiled library's function names.
+
+### What this will prove — and what it will not
+
+A successful run will establish that this specific translated Cuphead vertex shader can be converted by SPIRV-Cross into MSL and accepted by the iPhone's Metal compiler. It will not yet prove that its vertex attributes, buffer contents, texture bindings, clip/cull distance handling, render-pipeline descriptor, or rendered output match the original game. No render pipeline or Cuphead frame is created by this test. Object 141 remains the next resource-layout fixture after object 138 succeeds.
+
+### Next manual run
+
+The source and workflow changes are committed, but no workflow has been dispatched and no IPA has been built or installed. After the next manual **Build Universal NxNative Shell** run, install the resulting IPA, extract Cuphead if needed, run **Inspect Unity Shader Objects**, run **Survey all Cuphead vertex shaders**, then press **Convert object 138 to MSL + Metal**. Share the complete conversion/Metal report, including any SPIRV-Cross or Metal compiler error. Commits still do not auto-run the workflow.
