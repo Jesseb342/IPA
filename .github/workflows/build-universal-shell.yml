@@ -368,18 +368,18 @@ jobs:
           if missing:
               raise SystemExit("Shader scanner contract missing: " + ", ".join(missing))
 
-          plan = """Cuphead shader investigation — vertex-program survey
-          1. Preserve the complete Unity 2017.4 ShaderProgram parser and bounded on-device extraction.
-          2. The 64-sample NVNSPLIT1 archive validates byte-for-byte; SPH CommonWord0 identifies 28 vertex and 36 pixel programs, all SASS v3.
-          3. The first real Cuphead vertex sample translated successfully: 384 SASS bytes / 12 bundles produced a valid 1,940-byte SPIR-V module with no translator notes and no reflected descriptors.
-          4. The app now prepares a batch of all bounded Cuphead vertex samples, including each sample's c1 tail in the translator job. It reports per-shader SPIR-V validity, reflection counts, and failures.
-          5. Manually build/install the shell and run Survey all Cuphead vertex shaders. Use the resulting ranking to identify resource-bearing or more representative programs.
-          6. Resource answers remain diagnostic defaults where unknown. Do not claim correct attribute, texture, or image typing from SPIR-V validity alone.
-          7. Reconcile resource/interface metadata with Unity serialized ShaderProgram/pass/variant records, then test pixel programs and SPIR-V-to-MSL/Metal compilation.
+          plan = """Cuphead shader investigation — vertex interfaces and resource layouts
+          1. The 64-sample NVNSPLIT1 archive validates byte-for-byte; SPH CommonWord0 identifies 28 vertex and 36 pixel programs, all SASS v3.
+          2. The first Cuphead vertex probe translated to valid SPIR-V. The subsequent on-device survey reported 95/95 valid SPIR-V outputs, zero failures, and a zero translator exit code.
+          3. The survey's aggregate reflection contains 1 texture, 0 images, 103 constant-buffer entries, and 2 storage-buffer entries. The leading samples are object 138/subprogram 12 and object 141/subprograms 8 and 9.
+          4. The app now preserves per-sample Unity object/subprogram/version/GPU-type/keyword sidecars and reports SPIR-V input/output interfaces, built-ins, descriptors, buffer member offsets/types, and detailed translator resource records.
+          5. Manually build/install the shell. Re-run Inspect Unity Shader Objects to regenerate metadata sidecars, then run Survey all Cuphead vertex shaders and share the full report.
+          6. Use the report to reconcile input/output types, descriptors, and constant-buffer offsets with Maxwell SPH/SASS and Unity keyword/pass metadata. Do not treat the current float vertex-attribute fallback as authoritative.
+          7. Once resource/interface metadata is understood, translate selected representative shaders through SPIR-V-to-MSL and compile them with the on-device Metal compiler. Only then expand the translation survey to pixel programs.
           8. Keep all game data, jobs, and outputs in the iPhone sandbox. Actions remain build/source-validation only and do not receive user game files or keys.
-          
-          No Cuphead Metal compilation or game rendering is claimed. The wrapper flag remains raw metadata, not a stage definition.
-          """
+
+          The 95/95 result proves successful SPIR-V generation, not semantic correctness, Metal compilation, or Cuphead rendering. The wrapper flag remains raw metadata, not a stage definition.
+          """""
           Path(sys.argv[2]).write_text(plan)
           print("Verified the multi-object Unity Shader extraction safeguards and local-only output contract.")
           print(plan)
@@ -512,7 +512,7 @@ jobs:
 
           binary = pathlib.Path(sys.argv[1])
           data = binary.read_bytes()
-          required = (b"ImportScreenView", b"_dm_show_import_screen", b"Inspect Unity Shader Objects", b"Survey all Cuphead vertex shaders", b"translated_valid_spirv", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso", b"nxn_arm64_inspect_function", b"nxn_arm64_discover_linker_stubs")
+          required = (b"ImportScreenView", b"_dm_show_import_screen", b"Inspect Unity Shader Objects", b"Survey all Cuphead vertex shaders", b"translated_valid_spirv", b"spirv_buffer_member", b"unity_metadata_sidecars", b"interface_input", b"NxNativeMetadataProbe.framework", b"nxn_inspect_nsp", b"nxn_extract_game", b"nxn_extract_dlc", b"nxn_inspect_nso", b"nxn_rewrite_nso", b"nxn_arm64_encoder_selftest", b"nxn_arm64_disassemble_nso", b"nxn_arm64_analyze_nso", b"nxn_arm64_inspect_function", b"nxn_arm64_discover_linker_stubs")
           missing = [item.decode() for item in required if item not in data]
           if missing:
               print("::error::Compiled import screen symbols missing: " + ", ".join(missing))
