@@ -146,15 +146,19 @@ enum OnDeviceMetalCompiler {
                 }
                 diagnosticSource = diagnosticSource.replacingOccurrences(of: "uint _m0[1];", with: "uint _m0[64];")
             }
-            guard diagnosticSource.contains("    float gl_PointSize [[point_size]];\n};") else {
-                throw CompilerError.fixture("position probe could not locate the translated output structure")
+            // Reuse an existing float4 varying rather than adding a new Metal
+            // user location. Metal can reject an added varying when its stage
+            // interface does not line up with the translated output structure.
+            guard let varyingLine = diagnosticSource.components(separatedBy: "\n").first(where: {
+                $0.contains("float4 ") && $0.contains("[[user(locn0)]]")
+            }),
+            let fieldStart = varyingLine.range(of: "float4 "),
+            let fieldEnd = varyingLine.range(of: " [[user(locn0)]]") else {
+                throw CompilerError.fixture("position probe could not locate an existing float4 user(locn0) varying")
             }
-            diagnosticSource = diagnosticSource.replacingOccurrences(
-                of: "    float gl_PointSize [[point_size]];\n};",
-                with: "    float gl_PointSize [[point_size]];\n    float4 nxn_original_position [[user(locn3)]];\n};"
-            )
+            let originalPositionField = String(varyingLine[fieldStart.upperBound..<fieldEnd.lowerBound])
             let override = """
-                    out.nxn_original_position = out.gl_Position;
+                    out.\(originalPositionField) = out.gl_Position;
                     float2 nxn_fixture_positions[3] = {
                         float2(-0.8, -0.8),
                         float2( 0.8, -0.8),
@@ -202,7 +206,7 @@ enum OnDeviceMetalCompiler {
         #include <metal_stdlib>
         using namespace metal;
         struct nxn_position_probe_in {
-            float4 originalPosition [[user(locn3)]];
+            float4 originalPosition [[user(locn0)]];
         };
         fragment float4 nxn_fixture_fragment(nxn_position_probe_in in [[stage_in]]) {
             float4 encoded = clamp(in.originalPosition * 0.25 + 0.5, 0.0, 1.0);
