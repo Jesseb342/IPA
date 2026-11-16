@@ -172,7 +172,11 @@ enum OnDeviceMetalCompiler {
         var boundTextures = 0
         var boundSamplers = 0
         var resources = FixtureResources()
+        var processedBindingIndices = Set<Int>()
         for binding in reflection.vertexBindings where binding.isUsed {
+            // Metal may repeat reflection entries for the same argument-buffer
+            // binding. Allocate and bind each Metal buffer index only once.
+            guard processedBindingIndices.insert(binding.index).inserted else { continue }
             // Metal reserves vertex buffer index 30 for the vertex-descriptor
             // stage-in attributes configured above. It is not a reflected shader
             // resource to allocate in FixtureResources; the synthetic vertex
@@ -338,8 +342,8 @@ enum OnDeviceMetalCompiler {
 
     /// Build the synthetic argument buffer used by the offscreen fixture.
     ///
-    /// The current Cuphead fixtures expose a single inline float4[4096] member
-    /// (65,536 bytes, argument ID 0). Inline constants are written with
+    /// Current fixtures expose inline float4 arrays and a uint array in the
+    /// reflected argument-buffer layouts. Inline constants are written with
     /// MTLArgumentEncoder.constantData(at:), not treated as resource handles.
     /// Real game constants are not available in this smoke test, so this
     /// intentionally zero-fills the inline data while preserving its layout.
@@ -373,7 +377,7 @@ enum OnDeviceMetalCompiler {
         for member in expectedDataMembers {
             guard let array = member.arrayType(),
                   array.argumentIndexStride == 0,
-                  array.elementType == .float4 else {
+                  array.elementType == .float4 || array.elementType == .uint else {
                 let details = argumentBufferSummary(bindingIndex: bindingIndex, reflection: reflection)
                 throw CompilerError.fixture("unsupported inline argument data at vertex binding index \(bindingIndex); \(details)")
             }
