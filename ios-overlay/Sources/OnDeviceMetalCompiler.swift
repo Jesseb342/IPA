@@ -75,7 +75,7 @@ enum OnDeviceMetalCompiler {
         #include <metal_stdlib>
         using namespace metal;
         struct nxn_position_probe_in {
-            float4 originalPosition [[user(locn31)]];
+            float4 originalPosition [[user(locn3)]];
         };
         fragment float4 nxn_fixture_fragment(nxn_position_probe_in in [[stage_in]]) {
             float4 encoded = clamp(in.originalPosition * 0.25 + 0.5, 0.0, 1.0);
@@ -161,7 +161,7 @@ enum OnDeviceMetalCompiler {
             }
             diagnosticSource = diagnosticSource.replacingOccurrences(
                 of: "    float gl_PointSize [[point_size]];\n};",
-                with: "    float gl_PointSize [[point_size]];\n    float4 nxn_original_position [[user(locn31)]];\n};"
+                with: "    float gl_PointSize [[point_size]];\n    float4 nxn_original_position [[user(locn3)]];\n};"
             )
             let override = """
                     out.nxn_original_position = out.gl_Position;
@@ -212,7 +212,7 @@ enum OnDeviceMetalCompiler {
         #include <metal_stdlib>
         using namespace metal;
         struct nxn_position_probe_in {
-            float4 originalPosition [[user(locn31)]];
+            float4 originalPosition [[user(locn3)]];
         };
         fragment float4 nxn_fixture_fragment(nxn_position_probe_in in [[stage_in]]) {
             float4 encoded = clamp(in.originalPosition * 0.25 + 0.5, 0.0, 1.0);
