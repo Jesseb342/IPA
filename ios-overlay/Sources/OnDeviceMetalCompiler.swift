@@ -179,7 +179,10 @@ enum OnDeviceMetalCompiler {
             // buffer is bound to this slot immediately before the draw.
             if binding.index == 30 { continue }
             guard !binding.isArgument else {
-                throw CompilerError.fixture("argument-buffer resource at vertex binding index \(binding.index) is not supported by this smoke test")
+                let details = argumentBufferSummary(bindingIndex: binding.index, reflection: reflection)
+                throw CompilerError.fixture(
+                    "argument-buffer resource at vertex binding index \(binding.index) requires encoding; \(details)"
+                )
             }
             switch binding.type {
             case .buffer:
@@ -325,6 +328,25 @@ enum OnDeviceMetalCompiler {
             "draw_nonclear_pixels|\(nonClearPixels)",
             "draw_scope|synthetic vertex data and placeholder resources; not Cuphead's real buffers or textures"
         ].joined(separator: "\n")
+    }
+
+    /// Describe the reflected argument-buffer table so the next device scan
+    /// can drive a correct MTLArgumentEncoder implementation. Do not bind a
+    /// zero-filled ordinary buffer: argument-buffer entries are encoded handles.
+    private static func argumentBufferSummary(
+        bindingIndex: Int,
+        reflection: MTLRenderPipelineReflection
+    ) -> String {
+        guard let argument = reflection.vertexArguments?.first(where: { $0.index == bindingIndex }) else {
+            return "argument_layout=unavailable"
+        }
+        guard let structure = argument.bufferStructType else {
+            return "argument_name=\(argument.name),argument_type=\(argument.bufferDataType.rawValue),members=unavailable"
+        }
+        let members = structure.members.map { member in
+            "\(member.name):type=\(member.dataType.rawValue):id=\(member.argumentIndex):offset=\(member.offset)"
+        }
+        return "argument_name=\(argument.name),argument_size=\(argument.bufferDataSize),members=[\(members.joined(separator: ","))]"
     }
 
     private struct FixtureResources {
