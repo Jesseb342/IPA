@@ -2263,6 +2263,20 @@ private struct ImportScreenView: View {
                         return "gpu_draw|failed\ngpu_draw_error|\(detail)"
                     }
                 }()
+                let positionOverrideResult: String = {
+                    do {
+                        return try OnDeviceMetalCompiler.runFixtureOffscreenDraw(
+                            vertexLibrary: library,
+                            vertexFunctionName: "main0",
+                            positionOverrideSource: source
+                        )
+                    } catch {
+                        let detail = error.localizedDescription
+                            .replacingOccurrences(of: "|", with: "_")
+                            .replacingOccurrences(of: "\n", with: " ")
+                        return "position_override_draw|failed\nposition_override_error|\(detail)"
+                    }
+                }()
                 let diagnosticText = (try String(contentsOf: diagnostics, encoding: .utf8))
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                     .replacingOccurrences(of: "\n", with: "; ")
@@ -2283,6 +2297,7 @@ private struct ImportScreenView: View {
                     pipelineResult.0,
                     pipelineResult.1,
                     drawResult,
+                    positionOverrideResult,
                     "pipeline_scope|render pipeline validated; offscreen GPU draw and readback reported separately"
                 ]
                 if let reflectionData = try? Data(contentsOf: reflectionURL),
