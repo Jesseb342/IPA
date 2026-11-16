@@ -127,12 +127,13 @@ enum OnDeviceMetalCompiler {
             var diagnosticSource = positionOverrideSource
             let stageInput = "main0_in in [[stage_in]]"
             guard diagnosticSource.contains(stageInput),
-                  let returnRange = diagnosticSource.range(of: "return out;", options: .backwards) else {
+                  diagnosticSource.contains("return out;") else {
                 throw CompilerError.fixture("position-override diagnostic could not locate the translated main0 input or final output")
             }
             diagnosticSource = diagnosticSource.replacingOccurrences(
                 of: stageInput,
                 with: stageInput + ", uint nxn_vertex_id [[vertex_id]]",
+                options: [],
                 range: diagnosticSource.range(of: stageInput)
             )
             // SPIRV-Cross currently lowers this runtime uint array to a one-element
@@ -153,7 +154,10 @@ enum OnDeviceMetalCompiler {
                     out.gl_Position = float4(nxn_fixture_positions[nxn_vertex_id], 0.0, 1.0);
                     return out;
             """
-            diagnosticSource.replaceSubrange(returnRange, with: override)
+            guard let finalReturnRange = diagnosticSource.range(of: "return out;", options: .backwards) else {
+                throw CompilerError.fixture("position-override diagnostic lost the final output return")
+            }
+            diagnosticSource.replaceSubrange(finalReturnRange, with: override)
             let diagnosticLibrary = try compile(source: diagnosticSource, device: device)
             let diagnosticReport = try runFixtureOffscreenDraw(
                 vertexLibrary: diagnosticLibrary,
