@@ -421,6 +421,21 @@ enum OnDeviceMetalCompiler {
             }
             return count
         }
+        let positionProbeRange = pixels.withUnsafeBytes { raw -> String in
+            guard let bytes = raw.bindMemory(to: UInt8.self).baseAddress else { return "unavailable" }
+            var minima = [255, 255, 255]
+            var maxima = [0, 0, 0]
+            for y in 0..<height {
+                for x in 0..<width {
+                    let offset = y * rowBytes + x * 4
+                    for channel in 0..<3 {
+                        minima[channel] = min(minima[channel], Int(bytes[offset + channel]))
+                        maxima[channel] = max(maxima[channel], Int(bytes[offset + channel]))
+                    }
+                }
+            }
+            return "r=\(minima[2])...\(maxima[2]),g=\(minima[1])...\(maxima[1]),b=\(minima[0])...\(maxima[0])"
+        }
         // Independent known-good control triangle: generated from vertex_id,
         // so it does not depend on the translated shader or game resources.
         let controlVertexSource = """
@@ -504,6 +519,7 @@ enum OnDeviceMetalCompiler {
             "draw_resource_bindings|\(resourceSummary.isEmpty ? "none" : resourceSummary.sorted().joined(separator: ","))",
             "draw_readback|success",
             "draw_nonclear_pixels|\(nonClearPixels)",
+            "position_probe_channel_range|\(positionProbe ? positionProbeRange : "disabled")",
             "control_draw|completed",
             "control_draw_readback|success",
             "control_draw_nonclear_pixels|\(controlNonClearPixels)",
