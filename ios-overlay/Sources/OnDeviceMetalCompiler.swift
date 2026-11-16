@@ -343,8 +343,17 @@ enum OnDeviceMetalCompiler {
         guard let structure = argument.bufferStructType else {
             return "argument_name=\(argument.name),argument_type=\(argument.bufferDataType.rawValue),members=unavailable"
         }
-        let members = structure.members.map { member in
-            "\(member.name):type=\(member.dataType.rawValue):id=\(member.argumentIndex):offset=\(member.offset)"
+        let members = structure.members.map { member -> String in
+            if let array = member.arrayType() {
+                return "\(member.name):type=array:element=\(array.elementType.rawValue):length=\(array.arrayLength):stride=\(array.stride):argument_id_stride=\(array.argumentIndexStride):id=\(member.argumentIndex):offset=\(member.offset)"
+            }
+            if let pointer = member.pointerType() {
+                return "\(member.name):type=pointer:element=\(pointer.elementType.rawValue):size=\(pointer.dataSize):alignment=\(pointer.alignment):id=\(member.argumentIndex):offset=\(member.offset)"
+            }
+            if let nested = member.structType() {
+                return "\(member.name):type=struct:nested_members=\(nested.members.count):id=\(member.argumentIndex):offset=\(member.offset)"
+            }
+            return "\(member.name):type=\(member.dataType.rawValue):id=\(member.argumentIndex):offset=\(member.offset)"
         }
         return "argument_name=\(argument.name),argument_size=\(argument.bufferDataSize),members=[\(members.joined(separator: ","))]"
     }
