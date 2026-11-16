@@ -116,6 +116,7 @@ enum OnDeviceMetalCompiler {
         vertexFunctionName: String,
         positionOverrideSource: String? = nil,
         positionProbe: Bool = false,
+        positionProbeFragmentSource: String? = nil,
         width: Int = 64,
         height: Int = 64,
         device: MTLDevice? = MTLCreateSystemDefaultDevice()
@@ -164,6 +165,24 @@ enum OnDeviceMetalCompiler {
                 throw CompilerError.fixture("position probe could not locate a float4 user(locn0) varying in main0_out")
             }
             let originalPositionField = String(varyingLine[fieldStart.upperBound..<fieldEnd.lowerBound])
+            let probeVaryings = outputStruct.components(separatedBy: "\n").filter {
+                $0.contains("[[user(locn")
+            }
+            guard !probeVaryings.isEmpty else {
+                throw CompilerError.fixture("position probe found no user varyings in main0_out")
+            }
+            let probeFields = probeVaryings.joined(separator: "\n")
+            let probeFragmentSource = """
+            #include <metal_stdlib>
+            using namespace metal;
+            struct nxn_position_probe_in {
+            \(probeFields)
+            };
+            fragment float4 nxn_fixture_fragment(nxn_position_probe_in in [[stage_in]]) {
+                float4 encoded = clamp(in.\(originalPositionField) * 0.25 + 0.5, 0.0, 1.0);
+                return float4(encoded.xyz, encoded.w);
+            }
+            """
             let override = """
                     out.\(originalPositionField) = out.gl_Position;
                     float2 nxn_fixture_positions[3] = {
@@ -183,6 +202,7 @@ enum OnDeviceMetalCompiler {
                 vertexLibrary: diagnosticLibrary,
                 vertexFunctionName: vertexFunctionName,
                 positionProbe: true,
+                positionProbeFragmentSource: probeFragmentSource,
                 width: width,
                 height: height,
                 device: device
@@ -209,17 +229,15 @@ enum OnDeviceMetalCompiler {
             throw CompilerError.missingFunction(vertexFunctionName)
         }
 
-        let fragmentSource = positionProbe ? """
-        #include <metal_stdlib>
-        using namespace metal;
-        struct nxn_position_probe_in {
-            float4 originalPosition [[user(locn0)]];
-        };
-        fragment float4 nxn_fixture_fragment(nxn_position_probe_in in [[stage_in]]) {
-            float4 encoded = clamp(in.originalPosition * 0.25 + 0.5, 0.0, 1.0);
-            return float4(encoded.xyz, encoded.w);
-        }
-        """ : """
+        let fragmentSource = positionProbe
+            ? (positionProbeFragmentSource ?? """
+                #include <metal_stdlib>
+                using namespace metal;
+                fragment float4 nxn_fixture_fragment() {
+                    return float4(1.0, 1.0, 1.0, 1.0);
+                }
+                """)
+            : """
         #include <metal_stdlib>
         using namespace metal;
         fragment float4 nxn_fixture_fragment() {
