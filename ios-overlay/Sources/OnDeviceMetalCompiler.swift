@@ -327,6 +327,80 @@ enum OnDeviceMetalCompiler {
             }
             return count
         }
+        // Independent known-good control triangle: generated from vertex_id,
+        // so it does not depend on the translated shader or game resources.
+        let controlVertexSource = """
+        #include <metal_stdlib>
+        using namespace metal;
+        vertex float4 nxn_fixture_control_vertex(uint vertexID [[vertex_id]]) {
+            constexpr float2 positions[3] = {
+                float2(-0.8, -0.8),
+                float2( 0.8, -0.8),
+                float2( 0.0,  0.8)
+            };
+            return float4(positions[vertexID], 0.0, 1.0);
+        }
+        """
+        let controlVertexLibrary = try compile(source: controlVertexSource, device: device)
+        guard let controlVertexFunction = controlVertexLibrary.makeFunction(name: "nxn_fixture_control_vertex") else {
+            throw CompilerError.missingFunction("nxn_fixture_control_vertex")
+        }
+        let controlPipelineDescriptor = MTLRenderPipelineDescriptor()
+        controlPipelineDescriptor.label = "Metal offscreen control triangle"
+        controlPipelineDescriptor.vertexFunction = controlVertexFunction
+        controlPipelineDescriptor.fragmentFunction = fragmentFunction
+        controlPipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        controlPipelineDescriptor.sampleCount = 1
+        let controlPipeline = try device.makeRenderPipelineState(descriptor: controlPipelineDescriptor)
+
+        let controlTargetDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        controlTargetDescriptor.usage = [.renderTarget, .shaderRead]
+        controlTargetDescriptor.storageMode = .shared
+        guard let controlTarget = device.makeTexture(descriptor: controlTargetDescriptor),
+              let controlCommandBuffer = queue.makeCommandBuffer() else {
+            throw CompilerError.noMetalDevice
+        }
+        let controlPass = MTLRenderPassDescriptor()
+        controlPass.colorAttachments[0].texture = controlTarget
+        controlPass.colorAttachments[0].loadAction = .clear
+        controlPass.colorAttachments[0].storeAction = .store
+        controlPass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 1)
+        guard let controlEncoder = controlCommandBuffer.makeRenderCommandEncoder(descriptor: controlPass) else {
+            throw CompilerError.noMetalDevice
+        }
+        controlEncoder.setRenderPipelineState(controlPipeline)
+        controlEncoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        controlEncoder.endEncoding()
+        controlCommandBuffer.commit()
+        controlCommandBuffer.waitUntilCompleted()
+        guard controlCommandBuffer.status == .completed, controlCommandBuffer.error == nil else {
+            throw CompilerError.fixture("control GPU command failed: \(controlCommandBuffer.error?.localizedDescription ?? String(describing: controlCommandBuffer.status))")
+        }
+        var controlPixels = Data(count: rowBytes * height)
+        controlPixels.withUnsafeMutableBytes { bytes in
+            if let base = bytes.baseAddress {
+                controlTarget.getBytes(base, bytesPerRow: rowBytes, from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+            }
+        }
+        let controlNonClearPixels = controlPixels.withUnsafeBytes { raw -> Int in
+            guard let bytes = raw.bindMemory(to: UInt8.self).baseAddress else { return 0 }
+            var count = 0
+            for y in 0..<height {
+                for x in 0..<width {
+                    let offset = y * rowBytes + x * 4
+                    if bytes[offset] > 16 || bytes[offset + 1] > 16 || bytes[offset + 2] > 16 {
+                        count += 1
+                    }
+                }
+            }
+            return count
+        }
+
         return [
             "gpu_draw|completed",
             "draw_dimensions|\(width)x\(height)",
@@ -336,6 +410,10 @@ enum OnDeviceMetalCompiler {
             "draw_resource_bindings|\(resourceSummary.isEmpty ? "none" : resourceSummary.sorted().joined(separator: ","))",
             "draw_readback|success",
             "draw_nonclear_pixels|\(nonClearPixels)",
+            "control_draw|completed",
+            "control_draw_readback|success",
+            "control_draw_nonclear_pixels|\(controlNonClearPixels)",
+            "control_draw_scope|known-good vertex_id triangle and white fragment; independent of translated shader",
             "draw_scope|synthetic vertex data and placeholder resources; not Cuphead's real buffers or textures"
         ].joined(separator: "\n")
     }
