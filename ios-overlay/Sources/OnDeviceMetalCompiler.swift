@@ -106,12 +106,15 @@ enum OnDeviceMetalCompiler {
 
     /// Execute a translated vertex shader in a small offscreen render pass.
     ///
-    /// All reflected vertex-stage resources receive zero-filled buffers or
-    /// minimal placeholder textures/samplers. This is an execution smoke test,
-    /// not a reconstruction of Cuphead's real resource contents or ABI.
+    /// When positionOverrideSource is supplied, compile a diagnostic copy that
+    /// forces a vertex_id triangle at the end of main0. The original shader's
+    /// calculations still execute, but cannot determine the final clip position.
+    /// All reflected resources otherwise receive zero-filled buffers or minimal
+    /// placeholders; this is not a reconstruction of Cuphead's real resource ABI.
     static func runFixtureOffscreenDraw(
         vertexLibrary: MTLLibrary,
         vertexFunctionName: String,
+        positionOverrideSource: String? = nil,
         width: Int = 64,
         height: Int = 64,
         device: MTLDevice? = MTLCreateSystemDefaultDevice()
@@ -119,6 +122,61 @@ enum OnDeviceMetalCompiler {
         guard let device else { throw CompilerError.noMetalDevice }
         guard width > 0, height > 0, width <= 512, height <= 512 else {
             throw CompilerError.fixture("render-target dimensions must be between 1 and 512 pixels")
+        }
+        if let positionOverrideSource {
+            var diagnosticSource = positionOverrideSource
+            let stageInput = "main0_in in [[stage_in]]"
+            guard diagnosticSource.contains(stageInput),
+                  let returnRange = diagnosticSource.range(of: "return out;", options: .backwards) else {
+                throw CompilerError.fixture("position-override diagnostic could not locate the translated main0 input or final output")
+            }
+            diagnosticSource = diagnosticSource.replacingOccurrences(
+                of: stageInput,
+                with: stageInput + ", uint nxn_vertex_id [[vertex_id]]",
+                range: diagnosticSource.range(of: stageInput)
+            )
+            // SPIRV-Cross currently lowers this runtime uint array to a one-element
+            // MSL array. Expand the diagnostic copy to the 64 elements read by
+            // this shader so the test does not perform out-of-bounds accesses.
+            if diagnosticSource.contains("device _23& vp_s0 [[buffer(2)]]") {
+                guard diagnosticSource.contains("uint _m0[1];") else {
+                    throw CompilerError.fixture("storage-buffer diagnostic could not locate the one-element MSL array")
+                }
+                diagnosticSource = diagnosticSource.replacingOccurrences(of: "uint _m0[1];", with: "uint _m0[64];")
+            }
+            let override = """
+                    float2 nxn_fixture_positions[3] = {
+                        float2(-0.8, -0.8),
+                        float2( 0.8, -0.8),
+                        float2( 0.0,  0.8)
+                    };
+                    out.gl_Position = float4(nxn_fixture_positions[nxn_vertex_id], 0.0, 1.0);
+                    return out;
+            """
+            diagnosticSource.replaceSubrange(returnRange, with: override)
+            let diagnosticLibrary = try compile(source: diagnosticSource, device: device)
+            let diagnosticReport = try runFixtureOffscreenDraw(
+                vertexLibrary: diagnosticLibrary,
+                vertexFunctionName: vertexFunctionName,
+                width: width,
+                height: height,
+                device: device
+            )
+            let lines = diagnosticReport.components(separatedBy: "\n")
+            let pixels = lines.first(where: { $0.hasPrefix("draw_nonclear_pixels|") })
+                .map { String($0.dropFirst("draw_nonclear_pixels|".count)) } ?? "missing"
+            let control = lines.first(where: { $0.hasPrefix("control_draw_nonclear_pixels|") })
+                .map { String($0.dropFirst("control_draw_nonclear_pixels|".count)) } ?? "missing"
+            let bindings = lines.first(where: { $0.hasPrefix("draw_resource_bindings|") })
+                .map { String($0.dropFirst("draw_resource_bindings|".count)) } ?? "missing"
+            return [
+                "position_override_compile|success",
+                "position_override_draw|completed",
+                "position_override_nonclear_pixels|\(pixels)",
+                "position_override_control_pixels|\(control)",
+                "position_override_resource_bindings|\(bindings)",
+                "position_override_scope|diagnostic MSL copy; forced vertex_id triangle position; original shader and resources otherwise retained"
+            ].joined(separator: "\n")
         }
         guard let vertexFunction = vertexLibrary.makeFunction(name: vertexFunctionName) else {
             throw CompilerError.missingFunction(vertexFunctionName)
