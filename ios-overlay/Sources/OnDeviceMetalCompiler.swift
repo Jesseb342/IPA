@@ -146,15 +146,22 @@ enum OnDeviceMetalCompiler {
                 }
                 diagnosticSource = diagnosticSource.replacingOccurrences(of: "uint _m0[1];", with: "uint _m0[64];")
             }
-            // Reuse an existing float4 varying rather than adding a new Metal
-            // user location. Metal can reject an added varying when its stage
-            // interface does not line up with the translated output structure.
-            guard let varyingLine = diagnosticSource.components(separatedBy: "\n").first(where: {
+            // Select the varying from main0_out specifically. Searching the
+            // entire translated source can accidentally capture a same-location
+            // declaration from another helper/input structure, leaving the
+            // actual vertex output unwritten and breaking fragment linkage.
+            guard let outputStructStart = diagnosticSource.range(of: "struct main0_out"),
+                  let outputBrace = diagnosticSource[outputStructStart.upperBound...].firstIndex(of: "{"),
+                  let outputEnd = diagnosticSource[outputBrace...].range(of: "};") else {
+                throw CompilerError.fixture("position probe could not locate the translated main0_out structure")
+            }
+            let outputStruct = String(diagnosticSource[outputBrace..<outputEnd.lowerBound])
+            guard let varyingLine = outputStruct.components(separatedBy: "\n").first(where: {
                 $0.contains("float4 ") && $0.contains("[[user(locn0)]]")
             }),
             let fieldStart = varyingLine.range(of: "float4 "),
             let fieldEnd = varyingLine.range(of: " [[user(locn0)]]") else {
-                throw CompilerError.fixture("position probe could not locate an existing float4 user(locn0) varying")
+                throw CompilerError.fixture("position probe could not locate a float4 user(locn0) varying in main0_out")
             }
             let originalPositionField = String(varyingLine[fieldStart.upperBound..<fieldEnd.lowerBound])
             let override = """
