@@ -173,6 +173,11 @@ enum OnDeviceMetalCompiler {
         var boundSamplers = 0
         var resources = FixtureResources()
         for binding in reflection.vertexBindings where binding.isUsed {
+            // Metal reserves vertex buffer index 30 for the vertex-descriptor
+            // stage-in attributes configured above. It is not a reflected shader
+            // resource to allocate in FixtureResources; the synthetic vertex
+            // buffer is bound to this slot immediately before the draw.
+            if binding.index == 30 { continue }
             guard !binding.isArgument else {
                 throw CompilerError.fixture("argument-buffer resource at vertex binding index \(binding.index) is not supported by this smoke test")
             }
@@ -180,9 +185,6 @@ enum OnDeviceMetalCompiler {
             case .buffer:
                 guard let bufferBinding = binding as? MTLBufferBinding else {
                     throw CompilerError.fixture("Metal did not expose buffer details for binding \(binding.index)")
-                }
-                guard binding.index != 30 else {
-                    throw CompilerError.fixture("vertex resource uses reserved attribute buffer slot 30")
                 }
                 let length = max(4096, bufferBinding.bufferDataSize)
                 guard let buffer = device.makeBuffer(length: length, options: .storageModeShared) else {
