@@ -2317,6 +2317,12 @@ private struct ImportScreenView: View {
                     $0.hasPrefix("spirv_buffer_member|")
                 }
                 report.append(contentsOf: structural.prefix(48))
+                // Include generated MSL in the diagnostic so a zero-pixel
+                // translated draw can be traced to position/clip assignments,
+                // input attribute use, and resource-dependent expressions.
+                report.append("msl_source_begin")
+                report.append(contentsOf: source.components(separatedBy: "\n"))
+                report.append("msl_source_end")
                 let drawCompleted = drawResult.contains("gpu_draw|completed")
                 let nonClearPixels = drawResult.components(separatedBy: "\n")
                     .first(where: { $0.hasPrefix("draw_nonclear_pixels|") })
