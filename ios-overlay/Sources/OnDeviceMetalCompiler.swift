@@ -353,9 +353,7 @@ enum OnDeviceMetalCompiler {
               let structure = argument.bufferStructType else {
             throw CompilerError.fixture("argument-buffer layout unavailable at vertex binding index \(bindingIndex)")
         }
-        guard let argumentEncoder = vertexFunction.makeArgumentEncoder(bufferIndex: bindingIndex) else {
-            throw CompilerError.fixture("Metal could not create an argument encoder at vertex binding index \(bindingIndex)")
-        }
+        let argumentEncoder = vertexFunction.makeArgumentEncoder(bufferIndex: bindingIndex)
 
         let expectedDataMembers = structure.members.filter { $0.arrayType() != nil }
         guard !expectedDataMembers.isEmpty,
