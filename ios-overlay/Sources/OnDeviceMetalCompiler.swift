@@ -71,17 +71,7 @@ enum OnDeviceMetalCompiler {
             throw CompilerError.missingFunction(vertexFunctionName)
         }
 
-        let fragmentSource = positionProbe ? """
-        #include <metal_stdlib>
-        using namespace metal;
-        struct nxn_position_probe_in {
-            float4 originalPosition [[user(locn3)]];
-        };
-        fragment float4 nxn_fixture_fragment(nxn_position_probe_in in [[stage_in]]) {
-            float4 encoded = clamp(in.originalPosition * 0.25 + 0.5, 0.0, 1.0);
-            return float4(encoded.xyz, encoded.w);
-        }
-        """ : """
+        let fragmentSource = """
         #include <metal_stdlib>
         using namespace metal;
         fragment float4 nxn_fixture_fragment() {
