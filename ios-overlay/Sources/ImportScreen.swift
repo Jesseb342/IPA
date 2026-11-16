@@ -2283,7 +2283,7 @@ private struct ImportScreenView: View {
                     pipelineResult.0,
                     pipelineResult.1,
                     drawResult,
-                    "pipeline_scope|pipeline state validated separately; see gpu_draw report for actual submission"
+                    "pipeline_scope|render pipeline validated; offscreen GPU draw and readback reported separately"
                 ]
                 if let reflectionData = try? Data(contentsOf: reflectionURL),
                    let reflection = try? JSONSerialization.jsonObject(with: reflectionData) as? [String: Any] {
@@ -2315,7 +2315,12 @@ private struct ImportScreenView: View {
                     $0.hasPrefix("spirv_buffer_member|")
                 }
                 report.append(contentsOf: structural.prefix(48))
-                report.append("scope|Metal library and render-pipeline state created; no vertex buffers bound, no draw submitted, no game rendering tested")
+                let drawCompleted = drawResult.contains("gpu_draw|completed")
+                let nonClearPixels = drawResult.components(separatedBy: "\n")
+                    .first(where: { $0.hasPrefix("draw_nonclear_pixels|") })
+                    .map { String($0.dropFirst("draw_nonclear_pixels|".count)) }
+                report.append("draw_output_status|\(drawCompleted ? (nonClearPixels == "0" ? "draw_completed_but_no_visible_pixels" : "draw_completed_with_visible_pixels") : "draw_not_completed")")
+                report.append("scope|Metal translation, compilation, pipeline creation, offscreen draw and readback tested; synthetic inputs only; no Cuphead game rendering tested")
                 return report.joined(separator: "\n")
             }.value
             cupheadMetalShaderLog = result
