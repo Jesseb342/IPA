@@ -178,11 +178,17 @@ enum OnDeviceMetalCompiler {
             // resource to allocate in FixtureResources; the synthetic vertex
             // buffer is bound to this slot immediately before the draw.
             if binding.index == 30 { continue }
-            guard !binding.isArgument else {
-                let details = argumentBufferSummary(bindingIndex: binding.index, reflection: reflection)
-                throw CompilerError.fixture(
-                    "argument-buffer resource at vertex binding index \(binding.index) requires encoding; \(details)"
+            if binding.isArgument {
+                let argumentBuffer = try makeFixtureArgumentBuffer(
+                    vertexFunction: vertexFunction,
+                    bindingIndex: binding.index,
+                    reflection: reflection,
+                    device: device
                 )
+                resources.buffers[binding.index] = argumentBuffer
+                resourceSummary.append("argument-buffer@\(binding.index):\(argumentBuffer.length)")
+                boundBuffers += 1
+                continue
             }
             switch binding.type {
             case .buffer:
@@ -330,9 +336,60 @@ enum OnDeviceMetalCompiler {
         ].joined(separator: "\n")
     }
 
-    /// Describe the reflected argument-buffer table so the next device scan
-    /// can drive a correct MTLArgumentEncoder implementation. Do not bind a
-    /// zero-filled ordinary buffer: argument-buffer entries are encoded handles.
+    /// Build the synthetic argument buffer used by the offscreen fixture.
+    ///
+    /// The current Cuphead fixtures expose a single inline float4[4096] member
+    /// (65,536 bytes, argument ID 0). Inline constants are written with
+    /// MTLArgumentEncoder.constantData(at:), not treated as resource handles.
+    /// Real game constants are not available in this smoke test, so this
+    /// intentionally zero-fills the inline data while preserving its layout.
+    private static func makeFixtureArgumentBuffer(
+        vertexFunction: MTLFunction,
+        bindingIndex: Int,
+        reflection: MTLRenderPipelineReflection,
+        device: MTLDevice
+    ) throws -> MTLBuffer {
+        guard let argument = reflection.vertexArguments?.first(where: { $0.index == bindingIndex }),
+              let structure = argument.bufferStructType else {
+            throw CompilerError.fixture("argument-buffer layout unavailable at vertex binding index \(bindingIndex)")
+        }
+        guard let argumentEncoder = vertexFunction.makeArgumentEncoder(bufferIndex: bindingIndex) else {
+            throw CompilerError.fixture("Metal could not create an argument encoder at vertex binding index \(bindingIndex)")
+        }
+
+        let expectedDataMembers = structure.members.filter { $0.arrayType() != nil }
+        guard !expectedDataMembers.isEmpty,
+              expectedDataMembers.count == structure.members.count else {
+            let details = argumentBufferSummary(bindingIndex: bindingIndex, reflection: reflection)
+            throw CompilerError.fixture("argument buffer contains unsupported non-inline members; \(details)")
+        }
+
+        let allocationLength = max(argumentEncoder.encodedLength, argument.bufferDataSize)
+        guard allocationLength > 0,
+              let buffer = device.makeBuffer(length: allocationLength, options: .storageModeShared) else {
+            throw CompilerError.fixture("could not allocate argument buffer at vertex binding index \(bindingIndex)")
+        }
+        memset(buffer.contents(), 0, buffer.length)
+        argumentEncoder.setArgumentBuffer(buffer, offset: 0)
+
+        for member in expectedDataMembers {
+            guard let array = member.arrayType(),
+                  array.argumentIndexStride == 0,
+                  array.elementType == .float4 else {
+                let details = argumentBufferSummary(bindingIndex: bindingIndex, reflection: reflection)
+                throw CompilerError.fixture("unsupported inline argument data at vertex binding index \(bindingIndex); \(details)")
+            }
+            let (byteCount, overflow) = array.stride.multipliedReportingOverflow(by: array.arrayLength)
+            guard !overflow, byteCount > 0, byteCount <= buffer.length else {
+                throw CompilerError.fixture("invalid inline argument-data size at vertex binding index \(bindingIndex)")
+            }
+            let destination = argumentEncoder.constantData(at: member.argumentIndex)
+            memset(destination, 0, byteCount)
+        }
+        return buffer
+    }
+
+    /// Describe the reflected argument-buffer table for diagnostic output.
     private static func argumentBufferSummary(
         bindingIndex: Int,
         reflection: MTLRenderPipelineReflection
