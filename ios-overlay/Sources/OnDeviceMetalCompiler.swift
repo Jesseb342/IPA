@@ -156,12 +156,12 @@ enum OnDeviceMetalCompiler {
                 }
                 diagnosticSource = diagnosticSource.replacingOccurrences(of: "uint _m0[1];", with: "uint _m0[64];")
             }
-            guard diagnosticSource.contains("    float gl_PointSize [[point_size]];\\n};") else {
+            guard diagnosticSource.contains("    float gl_PointSize [[point_size]];\n};") else {
                 throw CompilerError.fixture("position probe could not locate the translated output structure")
             }
             diagnosticSource = diagnosticSource.replacingOccurrences(
-                of: "    float gl_PointSize [[point_size]];\\n};",
-                with: "    float gl_PointSize [[point_size]];\\n    float4 nxn_original_position [[user(locn31)]];\\n};"
+                of: "    float gl_PointSize [[point_size]];\n};",
+                with: "    float gl_PointSize [[point_size]];\n    float4 nxn_original_position [[user(locn31)]];\n};"
             )
             let override = """
                     out.nxn_original_position = out.gl_Position;
@@ -172,7 +172,8 @@ enum OnDeviceMetalCompiler {
                     };
                     out.gl_Position = float4(nxn_fixture_positions[nxn_vertex_id], 0.0, 1.0);
                     return out;
-            """;            guard let finalReturnRange = diagnosticSource.range(of: "return out;", options: .backwards) else {
+            """;
+            guard let finalReturnRange = diagnosticSource.range(of: "return out;", options: .backwards) else {
                 throw CompilerError.fixture("position-override diagnostic lost the final output return")
             }
             diagnosticSource.replaceSubrange(finalReturnRange, with: override)
@@ -207,7 +208,17 @@ enum OnDeviceMetalCompiler {
             throw CompilerError.missingFunction(vertexFunctionName)
         }
 
-        let fragmentSource = """
+        let fragmentSource = positionProbe ? """
+        #include <metal_stdlib>
+        using namespace metal;
+        struct nxn_position_probe_in {
+            float4 originalPosition [[user(locn31)]];
+        };
+        fragment float4 nxn_fixture_fragment(nxn_position_probe_in in [[stage_in]]) {
+            float4 encoded = clamp(in.originalPosition * 0.25 + 0.5, 0.0, 1.0);
+            return float4(encoded.xyz, encoded.w);
+        }
+        """ : """
         #include <metal_stdlib>
         using namespace metal;
         fragment float4 nxn_fixture_fragment() {
