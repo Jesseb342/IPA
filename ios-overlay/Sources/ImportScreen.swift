@@ -2309,7 +2309,9 @@ private struct ImportScreenView: View {
                 let structural = ShaderSPIRVReflection.report(spirvData, key: key).filter {
                     $0.hasPrefix("spirv_reflection|") ||
                     $0.hasPrefix("interface_input|") ||
+                    $0.hasPrefix("interface_input_member|") ||
                     $0.hasPrefix("interface_output|") ||
+                    $0.hasPrefix("interface_output_member|") ||
                     $0.hasPrefix("spirv_descriptor|") ||
                     $0.hasPrefix("spirv_buffer_layout|") ||
                     $0.hasPrefix("spirv_buffer_member|")
