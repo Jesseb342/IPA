@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-21T07:21:18Z",
+  "generatedAt": "2026-11-21T19:25:32Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "42666fe2af647179702857d1f29a2ef866fd36d5",
+    "commit": "ba34f1ba3e22ed18d215d73f50f76dfdb60f015e",
     "profilesPath": "dm/games"
   },
-  "count": 187,
+  "count": 212,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -253,6 +253,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01001B300B9BE000/README.md"
     },
     {
+      "titleId": "01001C8016B4E000",
+      "name": "FIFA 23 Legacy Edition",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01001C8016B4E000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01001C8016B4E000/README.md"
+    },
+    {
       "titleId": "01001F5010DFA000",
       "name": "Pokémon Legends: Arceus",
       "profileStatus": "profile_available",
@@ -319,6 +336,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100217023F6C000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100217023F6C000/README.md"
+    },
+    {
+      "titleId": "010026300BA4A000",
+      "name": "Slay the Spire",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": false,
+        "shaderPairs": false,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010026300BA4A000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010026300BA4A000/README.md"
     },
     {
       "titleId": "010027400CDC6000",
@@ -763,6 +797,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100429011144000/README.md"
     },
     {
+      "titleId": "010042D00D900000",
+      "name": "LEGO® Star Wars™: The Skywalker Saga",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010042D00D900000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010042D00D900000/README.md"
+    },
+    {
       "titleId": "010044500C182000",
       "name": "Sid Meier's Civilization VI",
       "profileStatus": "profile_available",
@@ -812,6 +863,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010045C014650000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010045C014650000/README.md"
+    },
+    {
+      "titleId": "01004680124E6000",
+      "name": "Bloodstained: Curse of the Moon 2",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01004680124E6000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01004680124E6000/README.md"
     },
     {
       "titleId": "010049900F546000",
@@ -899,6 +967,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01004AB00A260000/README.md"
     },
     {
+      "titleId": "01004B800AF5A000",
+      "name": "Bloodstained: Curse of the Moon",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01004B800AF5A000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01004B800AF5A000/README.md"
+    },
+    {
       "titleId": "01004D300C5AE000",
       "name": "Kirby and the Forgotten Land",
       "profileStatus": "profile_available",
@@ -916,6 +1001,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01004D300C5AE000/README.md"
     },
     {
+      "titleId": "010050F00BC1A000",
+      "name": "Resident Evil",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010050F00BC1A000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010050F00BC1A000/README.md"
+    },
+    {
       "titleId": "010051701FB46000",
       "name": "Monster Train 2",
       "profileStatus": "profile_available",
@@ -931,6 +1033,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010051701FB46000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010051701FB46000/README.md"
+    },
+    {
+      "titleId": "010051C0134F8000",
+      "name": "DRAGON BALL Z: KAKAROT + A NEW POWER AWAKENS SET",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010051C0134F8000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010051C0134F8000/README.md"
     },
     {
       "titleId": "01005270232F2000",
@@ -1016,6 +1135,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010056B015FE8000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010056B015FE8000/README.md"
+    },
+    {
+      "titleId": "010057A01E4D4000",
+      "name": "TSUKIHIME A piece of blue glass moon",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010057A01E4D4000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010057A01E4D4000/README.md"
     },
     {
       "titleId": "010057D006492000",
@@ -1203,6 +1339,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100646009FBE000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100646009FBE000/README.md"
+    },
+    {
+      "titleId": "010064800F66A000",
+      "name": "Borderlands: Game of the Year Edition",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010064800F66A000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010064800F66A000/README.md"
     },
     {
       "titleId": "010067300059A000",
@@ -1596,6 +1749,40 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007EF00011E000/README.md"
     },
     {
+      "titleId": "0100801011C3E000",
+      "name": "Persona 5 Strikers",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100801011C3E000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100801011C3E000/README.md"
+    },
+    {
+      "titleId": "0100830004FB6000",
+      "name": "L.A. Noire",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100830004FB6000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100830004FB6000/README.md"
+    },
+    {
       "titleId": "010086A022444000",
       "name": "BALL x PIT",
       "profileStatus": "profile_available",
@@ -1611,6 +1798,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010086A022444000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010086A022444000/README.md"
+    },
+    {
+      "titleId": "010087701B092000",
+      "name": "Persona 5 Tactica",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010087701B092000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010087701B092000/README.md"
     },
     {
       "titleId": "010089B00D09C000",
@@ -1698,6 +1902,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008CF01BAAC000/README.md"
     },
     {
+      "titleId": "01008D300C50C000",
+      "name": "Super Nintendo Entertainment System – Nintendo Classics",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008D300C50C000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008D300C50C000/README.md"
+    },
+    {
       "titleId": "01008D7016438000",
       "name": "13 Sentinels: Aegis Rim (Asia)",
       "profileStatus": "profile_available",
@@ -1764,6 +1985,40 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008DD013200000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008DD013200000/README.md"
+    },
+    {
+      "titleId": "01008F2005154000",
+      "name": "South Park: The Fractured But Whole",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008F2005154000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008F2005154000/README.md"
+    },
+    {
+      "titleId": "01008F4014A74000",
+      "name": "UnMetal",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": false,
+        "shaderPairs": false,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008F4014A74000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008F4014A74000/README.md"
     },
     {
       "titleId": "01008F6008C5E000",
@@ -1849,6 +2104,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010093801237C000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010093801237C000/README.md"
+    },
+    {
+      "titleId": "010095300B6A4000",
+      "name": "South Park: The Stick of Truth",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010095300B6A4000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010095300B6A4000/README.md"
     },
     {
       "titleId": "0100965017338000",
@@ -1970,6 +2242,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100A00019DE0000/README.md"
     },
     {
+      "titleId": "0100A0800E9C4000",
+      "name": "The Witcher 3: Wild Hunt — Complete Edition",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100A0800E9C4000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100A0800E9C4000/README.md"
+    },
+    {
       "titleId": "0100A3501946E000",
       "name": "OCTOPATH TRAVELER II",
       "profileStatus": "profile_available",
@@ -2032,7 +2321,7 @@
         "shaderFacts": true,
         "shaderPairs": true,
         "psoManifest": true,
-        "smokeTestData": false
+        "smokeTestData": true
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100A5C00D162000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100A5C00D162000/README.md"
@@ -2087,6 +2376,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100A83022A22000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100A83022A22000/README.md"
+    },
+    {
+      "titleId": "0100A8E016236000",
+      "name": "Kirby's Dream Buffet",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": true
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100A8E016236000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100A8E016236000/README.md"
     },
     {
       "titleId": "0100A9D01C446000",
@@ -2361,6 +2667,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100BF00112C0000/README.md"
     },
     {
+      "titleId": "0100BF500207C000",
+      "name": "Bloodstained: Ritual of the Night",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100BF500207C000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100BF500207C000/README.md"
+    },
+    {
       "titleId": "0100C1F0051B6000",
       "name": "Donkey Kong Country: Tropical Freeze",
       "profileStatus": "profile_available",
@@ -2514,6 +2837,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100CC80140F8000/README.md"
     },
     {
+      "titleId": "0100CD701434C000",
+      "name": "Twelve Minutes",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100CD701434C000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100CD701434C000/README.md"
+    },
+    {
       "titleId": "0100CD801CE5E000",
       "name": "Balatro",
       "profileStatus": "profile_available",
@@ -2548,6 +2888,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100CE4010AAC000/README.md"
     },
     {
+      "titleId": "0100D440269E8000",
+      "name": "Farming Simulator 26: Nintendo Switch Edition",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D440269E8000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D440269E8000/README.md"
+    },
+    {
       "titleId": "0100D4900E82C000",
       "name": "Metro 2033 Redux",
       "profileStatus": "profile_available",
@@ -2563,6 +2920,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D4900E82C000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D4900E82C000/README.md"
+    },
+    {
+      "titleId": "0100D5501857E000",
+      "name": "Sam & Max: The Devil's Playhouse",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D5501857E000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D5501857E000/README.md"
     },
     {
       "titleId": "0100D5B026844000",
@@ -2582,6 +2956,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D5B026844000/README.md"
     },
     {
+      "titleId": "0100D71004694000",
+      "name": "Minecraft for Nintendo Switch",
+      "profileStatus": "profile_partial",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": false,
+        "shaderFacts": false,
+        "shaderPairs": false,
+        "psoManifest": false,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D71004694000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D71004694000/README.md"
+    },
+    {
       "titleId": "0100D7C01F254000",
       "name": "DRAGON QUEST I & II HD-2D Remake",
       "profileStatus": "profile_available",
@@ -2597,6 +2988,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D7C01F254000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D7C01F254000/README.md"
+    },
+    {
+      "titleId": "0100D800117F4000",
+      "name": "Re:ZERO -Starting Life in Another World- The Prophecy of the Throne",
+      "profileStatus": "profile_partial",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": false,
+        "shaderFacts": false,
+        "shaderPairs": false,
+        "psoManifest": false,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D800117F4000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D800117F4000/README.md"
     },
     {
       "titleId": "0100D9F01D474000",
@@ -2886,6 +3294,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100FF500E34A000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100FF500E34A000/README.md"
+    },
+    {
+      "titleId": "040015100B514001",
+      "name": "Super Mario Bros. Wonder – Nintendo Switch 2 Edition + Meetup in Bellabel Park",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": true
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/040015100B514001",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/040015100B514001/README.md"
     },
     {
       "titleId": "0400245021D2C000",
