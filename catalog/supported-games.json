@@ -1,13 +1,13 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-24T10:02:47Z",
+  "generatedAt": "2026-11-24T22:34:08Z",
   "source": {
     "repository": "xinerqu/ns2ios-shell",
     "branch": "main",
-    "commit": "2787e919c57e22a69c6206c986a4265b965037b3",
+    "commit": "9e3e509d502bc88b952c77d8878770d621c583c7",
     "profilesPath": "dm/games"
   },
-  "count": 212,
+  "count": 237,
   "statusDefinitions": {
     "profile_available": "A game.tsv and shader_map.tsv exist in the upstream profile folder. This is not a guarantee of successful operation on every device.",
     "profile_partial": "The upstream folder exists, but one or more core profile files are missing.",
@@ -678,6 +678,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010036E00FB20000/README.md"
     },
     {
+      "titleId": "010037C022390000",
+      "name": "010037C022390000",
+      "profileStatus": "profile_partial",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": false,
+        "readme": true,
+        "shaderMap": false,
+        "shaderFacts": false,
+        "shaderPairs": false,
+        "psoManifest": false,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010037C022390000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010037C022390000/README.md"
+    },
+    {
       "titleId": "010038600B27E000",
       "name": "Bastion",
       "profileStatus": "profile_available",
@@ -778,6 +795,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010042000A986000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010042000A986000/README.md"
+    },
+    {
+      "titleId": "01004200189F4000",
+      "name": "Factorio",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": false,
+        "shaderPairs": false,
+        "psoManifest": false,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01004200189F4000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01004200189F4000/README.md"
     },
     {
       "titleId": "0100429011144000",
@@ -1290,6 +1324,40 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010062B01525C000/README.md"
     },
     {
+      "titleId": "010062E01FE0C000",
+      "name": "Digimon Story Time Stranger",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010062E01FE0C000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010062E01FE0C000/README.md"
+    },
+    {
+      "titleId": "010063100B2C2000",
+      "name": "Cytus α",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010063100B2C2000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010063100B2C2000/README.md"
+    },
+    {
       "titleId": "0100633007D48000",
       "name": "Hollow Knight",
       "profileStatus": "profile_available",
@@ -1477,6 +1545,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01006C300E9F0000/README.md"
     },
     {
+      "titleId": "01006CB010840000",
+      "name": "Oceanhorn 2: Knights of the Lost Realm",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01006CB010840000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01006CB010840000/README.md"
+    },
+    {
       "titleId": "01006D0017F7A000",
       "name": "Mario & Luigi: Brothership",
       "profileStatus": "profile_available",
@@ -1492,6 +1577,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01006D0017F7A000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01006D0017F7A000/README.md"
+    },
+    {
+      "titleId": "01006DC010326000",
+      "name": "BRAVELY DEFAULT Ⅱ",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01006DC010326000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01006DC010326000/README.md"
     },
     {
       "titleId": "01006F8002326000",
@@ -1526,6 +1628,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01006FE013472000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01006FE013472000/README.md"
+    },
+    {
+      "titleId": "010070E022546000",
+      "name": "Fate/hollow ataraxia REMASTERED",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010070E022546000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010070E022546000/README.md"
     },
     {
       "titleId": "0100713016CCC000",
@@ -1577,6 +1696,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007300020FA000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007300020FA000/README.md"
+    },
+    {
+      "titleId": "01007330027EE000",
+      "name": "ULTRA STREET FIGHTER II: The Final Challengers",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007330027EE000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007330027EE000/README.md"
     },
     {
       "titleId": "010074F013262000",
@@ -1715,6 +1851,57 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007BB017812000/README.md"
     },
     {
+      "titleId": "01007C50132C8000",
+      "name": "Ace Angler: Fishing Spirits",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007C50132C8000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007C50132C8000/README.md"
+    },
+    {
+      "titleId": "01007D7001D0E000",
+      "name": "Oceanhorn",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007D7001D0E000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007D7001D0E000/README.md"
+    },
+    {
+      "titleId": "01007E100456C000",
+      "name": "Guacamelee! 2",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007E100456C000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007E100456C000/README.md"
+    },
+    {
       "titleId": "01007E3006DDA000",
       "name": "Kirby Star Allies",
       "profileStatus": "profile_available",
@@ -1747,6 +1934,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007EF00011E000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007EF00011E000/README.md"
+    },
+    {
+      "titleId": "01007F600B134000",
+      "name": "Assassin's Creed® Ⅲ Remastered",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01007F600B134000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01007F600B134000/README.md"
     },
     {
       "titleId": "0100801011C3E000",
@@ -1851,6 +2055,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010089C01E9CA000/README.md"
     },
     {
+      "titleId": "01008B900DC0A000",
+      "name": "FINAL FANTASY VIII Remastered",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008B900DC0A000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008B900DC0A000/README.md"
+    },
+    {
       "titleId": "01008BC024FDE000",
       "name": "STEINS;GATE RE:BOOT",
       "profileStatus": "profile_available",
@@ -1883,6 +2104,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008C0016544000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008C0016544000/README.md"
+    },
+    {
+      "titleId": "01008CB0156BC000",
+      "name": "The Legend of Heroes: Trails into Reverie",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01008CB0156BC000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008CB0156BC000/README.md"
     },
     {
       "titleId": "01008CF01BAAC000",
@@ -2055,6 +2293,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01008F701C074000/README.md"
     },
     {
+      "titleId": "010092A0172E4000",
+      "name": "It Takes Two",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010092A0172E4000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010092A0172E4000/README.md"
+    },
+    {
       "titleId": "010092B0091D0000",
       "name": "Team Sonic Racing",
       "profileStatus": "profile_available",
@@ -2140,6 +2395,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100965017338000/README.md"
     },
     {
+      "titleId": "01009720213B0000",
+      "name": "CAPTAIN TSUBASA 2: WORLD FIGHTERS",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/01009720213B0000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/01009720213B0000/README.md"
+    },
+    {
       "titleId": "010097F018538000",
       "name": "DAVE THE DIVER",
       "profileStatus": "profile_available",
@@ -2155,6 +2427,40 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010097F018538000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010097F018538000/README.md"
+    },
+    {
+      "titleId": "010099801C4FA000",
+      "name": "METAL GEAR SOLID: Peace Walker - Master Collection Version",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010099801C4FA000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010099801C4FA000/README.md"
+    },
+    {
+      "titleId": "010099801C4FA001",
+      "name": "METAL GEAR SOLID: Peace Walker - Master Collection Version (Game)",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/010099801C4FA001",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/010099801C4FA001/README.md"
     },
     {
       "titleId": "010099C022B96000",
@@ -2495,6 +2801,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100ACD0163D0000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100ACD0163D0000/README.md"
+    },
+    {
+      "titleId": "0100AD10102B2000",
+      "name": "BioShock Remastered",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100AD10102B2000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100AD10102B2000/README.md"
     },
     {
       "titleId": "0100AE00096EA000",
@@ -2888,6 +3211,57 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100CE4010AAC000/README.md"
     },
     {
+      "titleId": "0100D0B00FB74000",
+      "name": "XCOM 2 Collection",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D0B00FB74000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D0B00FB74000/README.md"
+    },
+    {
+      "titleId": "0100D0B00FB74001",
+      "name": "XCOM 2 Collection: XCOM 2",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D0B00FB74001",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D0B00FB74001/README.md"
+    },
+    {
+      "titleId": "0100D0B00FB74002",
+      "name": "XCOM 2 Collection: War of the Chosen",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100D0B00FB74002",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100D0B00FB74002/README.md"
+    },
+    {
       "titleId": "0100D440269E8000",
       "name": "Farming Simulator 26: Nintendo Switch Edition",
       "profileStatus": "profile_available",
@@ -3177,6 +3551,23 @@
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100ECD018EBE000/README.md"
     },
     {
+      "titleId": "0100ED400EEC2000",
+      "name": "STORY OF SEASONS: Friends of Mineral Town",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100ED400EEC2000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100ED400EEC2000/README.md"
+    },
+    {
       "titleId": "0100ED7012DB2000",
       "name": "ROMANCE OF THE THREE KINGDOMS XIV: Diplomacy and Strategy Expansion Pack",
       "profileStatus": "profile_available",
@@ -3192,6 +3583,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100ED7012DB2000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100ED7012DB2000/README.md"
+    },
+    {
+      "titleId": "0100F2200C984000",
+      "name": "Mortal Kombat 11",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100F2200C984000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100F2200C984000/README.md"
     },
     {
       "titleId": "0100F28011892000",
@@ -3277,6 +3685,23 @@
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100FD8022DAA000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100FD8022DAA000/README.md"
+    },
+    {
+      "titleId": "0100FE701475A000",
+      "name": "Teenage Mutant Ninja Turtles: Shredder's Revenge",
+      "profileStatus": "profile_available",
+      "testStatus": "not_independently_verified",
+      "files": {
+        "gameProfile": true,
+        "readme": true,
+        "shaderMap": true,
+        "shaderFacts": true,
+        "shaderPairs": true,
+        "psoManifest": true,
+        "smokeTestData": false
+      },
+      "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0100FE701475A000",
+      "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0100FE701475A000/README.md"
     },
     {
       "titleId": "0100FF500E34A000",
@@ -3409,7 +3834,7 @@
         "shaderFacts": true,
         "shaderPairs": true,
         "psoManifest": true,
-        "smokeTestData": false
+        "smokeTestData": true
       },
       "profileUrl": "https://github.com/xinerqu/ns2ios-shell/tree/main/dm/games/0400486024DEC000",
       "readmeUrl": "https://github.com/xinerqu/ns2ios-shell/blob/main/dm/games/0400486024DEC000/README.md"
